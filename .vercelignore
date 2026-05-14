@@ -1,0 +1,17 @@
+# Local artifacts
+node_modules
+dist
+dist-ssr
+logs
+*.log
+
+# Secrets and local env files
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor metadata
+.vscode
+.idea
+.DS_Store
