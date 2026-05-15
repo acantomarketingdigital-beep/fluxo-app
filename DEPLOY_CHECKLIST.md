@@ -52,13 +52,25 @@ Nunca coloque `SUPABASE_SERVICE_ROLE_KEY` em código frontend, `src`, `public` o
 1. No Supabase, abra `SQL Editor`.
 2. Crie uma nova query.
 3. Copie todo o conteúdo de `supabase/fluxo_schema.sql`.
-4. Execute.
+4. Execute. O script também pede reload do schema cache do PostgREST.
 5. Confirme que as tabelas foram criadas:
 
 - `incomes`
 - `expenses`
 - `cards`
 - `transactions`
+
+### Validar schema do sync
+
+1. No `SQL Editor`, crie uma nova query.
+2. Copie todo o conteúdo de `supabase/validate_fluxo_schema.sql`.
+3. Execute.
+4. Verifique que todas as linhas estão com:
+
+- `exists_in_public = true`
+- `rls_enabled = true`
+- `can_select`, `can_insert`, `can_update`, `can_delete = true`
+- pelo menos uma policy para `select`, `insert`, `update` e `delete`
 
 ### Rodar `billing_schema.sql`
 

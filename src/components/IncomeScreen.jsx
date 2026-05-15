@@ -10,7 +10,7 @@ import {
 } from '../data/incomes'
 import {
   loadIncomesState,
-  resetIncomesDemoData,
+  resetIncomesData,
   saveIncomesState,
 } from '../storage/incomesStorage'
 import {
@@ -196,19 +196,19 @@ export function IncomeScreen() {
 
   function handleResetIncomes() {
     const confirmed = window.confirm(
-      'Resetar receitas? Isso apaga as receitas salvas neste navegador e restaura os dados de demonstração.',
+      'Apagar todas as receitas salvas neste navegador?',
     )
 
     if (!confirmed) {
       return
     }
 
-    setIncomesState(resetIncomesDemoData())
+    setIncomesState(resetIncomesData())
     setFormData(initialFormData)
-    setStatusMessage('Receitas de demonstração restauradas.')
+    setStatusMessage('Receitas apagadas.')
     addToast({
-      description: 'Os dados iniciais foram restaurados.',
-      title: 'Receitas resetadas',
+      description: 'Todas as receitas foram removidas.',
+      title: 'Receitas zeradas',
       tone: 'success',
     })
   }

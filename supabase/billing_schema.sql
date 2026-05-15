@@ -77,6 +77,7 @@ create trigger set_subscriptions_updated_at
 alter table public.profiles enable row level security;
 alter table public.subscriptions enable row level security;
 
+grant usage on schema public to authenticated;
 grant select on public.profiles to authenticated;
 grant select on public.subscriptions to authenticated;
 
@@ -91,3 +92,5 @@ create policy "subscriptions_select_own"
   on public.subscriptions for select
   to authenticated
   using ((select auth.uid()) = user_id);
+
+notify pgrst, 'reload schema';

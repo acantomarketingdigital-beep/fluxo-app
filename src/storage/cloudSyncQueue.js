@@ -1,14 +1,39 @@
 import { emitToast } from '../lib/toastEvents'
-import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import {
+  FLUXO_DATA_TABLES,
+  SUPABASE_SCHEMA,
+  fromPublicTable,
+  isSupabaseConfigured,
+  supabase,
+} from '../lib/supabase'
 
 const SYNC_DELAY = 650
+const SYNC_ERROR_TOAST_INTERVAL = 60_000
+const DATABASE_NOT_CONFIGURED_MESSAGE =
+  'Banco ainda não configurado. Seus dados ficam salvos neste dispositivo.'
+const DATABASE_PERMISSION_MESSAGE =
+  'Banco configurado, mas permissões/RLS precisam de ajuste. Dados locais preservados.'
+
 const syncTimers = new Map()
+const activeSyncs = new Set()
+const pendingSyncStates = new Map()
 let cloudSyncAccess = {
   enabled: true,
   message: 'Sincronização disponível.',
 }
+let cloudDatabaseAccess = {
+  message: '',
+  ready: true,
+  reason: null,
+}
+let lastSyncErrorToast = {
+  key: '',
+  shownAt: 0,
+}
 
 const datasetConfig = {
+  incomes: createSimpleDatasetConfig('incomes', 'incomes'),
+  expenses: createSimpleDatasetConfig('expenses', 'expenses'),
   cards: {
     conflict: 'user_id,record_type,local_id',
     deserialize: (rows) => ({
@@ -30,8 +55,6 @@ const datasetConfig = {
     ],
     table: 'cards',
   },
-  expenses: createSimpleDatasetConfig('expenses', 'expenses'),
-  incomes: createSimpleDatasetConfig('incomes', 'incomes'),
   transactions: createSimpleDatasetConfig('transactions', 'transactions'),
 }
 
@@ -40,15 +63,10 @@ export function queueCloudStateSync(dataset, state) {
     return
   }
 
-  if (!canUseCloudSync()) {
-    publishSyncStatus({
-      message: !cloudSyncAccess.enabled
-        ? cloudSyncAccess.message
-        : isSupabaseConfigured
-        ? 'Modo local ativo. A nuvem volta quando houver conexão.'
-        : 'Modo local ativo. Configure o Supabase para sincronizar.',
-      state: 'local',
-    })
+  const unavailableResult = getCloudSyncUnavailableResult()
+
+  if (unavailableResult) {
+    publishSyncStatus(unavailableResult)
     return
   }
 
@@ -56,7 +74,7 @@ export function queueCloudStateSync(dataset, state) {
   syncTimers.set(
     dataset,
     window.setTimeout(() => {
-      saveDatasetToCloud(dataset, state).catch((error) => reportSyncError(error))
+      runQueuedCloudSync(dataset, state)
     }, SYNC_DELAY),
   )
 }
@@ -69,38 +87,48 @@ export function setCloudSyncAccess(nextAccess) {
 }
 
 export function getCloudSyncAccess() {
+  const unavailableResult = getCloudSyncUnavailableResult()
+
+  if (unavailableResult) {
+    return {
+      enabled: false,
+      message: unavailableResult.message,
+      reason: unavailableResult.reason,
+    }
+  }
+
   return cloudSyncAccess
 }
 
 export function clearCloudSyncQueue() {
-  if (typeof window === 'undefined') {
-    syncTimers.clear()
-    return
+  if (typeof window !== 'undefined') {
+    syncTimers.forEach((timer) => window.clearTimeout(timer))
   }
 
-  syncTimers.forEach((timer) => window.clearTimeout(timer))
   syncTimers.clear()
+  pendingSyncStates.clear()
 }
 
 export async function deleteCloudDataForCurrentUser() {
   const user = await getCurrentUser()
 
   if (!user || !supabase) {
-    return {
-      message: 'Modo local ativo.',
-      state: 'local',
-    }
+    return createLocalStatus('Modo local ativo.', 'local')
   }
 
   const results = await Promise.all(
-    Object.values(datasetConfig).map((config) =>
-      supabase.from(config.table).delete().eq('user_id', user.id),
-    ),
+    Object.values(datasetConfig).map((config) => {
+      const table = fromPublicTable(config.table)
+      return table
+        ? table.delete().eq('user_id', user.id)
+        : Promise.resolve({ error: new Error('Supabase não configurado.') })
+    }),
   )
   const failedResult = results.find((result) => result.error)
 
   if (failedResult) {
-    throw failedResult.error
+    const result = handleCloudSyncError(failedResult.error)
+    throw new Error(result.message)
   }
 
   return {
@@ -108,6 +136,52 @@ export async function deleteCloudDataForCurrentUser() {
     state: 'synced',
     syncedAt: new Date().toISOString(),
   }
+}
+
+export async function validateFluxoCloudSchema() {
+  if (!canUseCloudSync()) {
+    return null
+  }
+
+  const user = await getCurrentUser()
+
+  if (!user) {
+    return null
+  }
+
+  const checks = await Promise.all(
+    FLUXO_DATA_TABLES.map(async (tableName) => {
+      const table = fromPublicTable(tableName)
+
+      if (!table) {
+        return {
+          error: new Error('Supabase não configurado.'),
+          table: tableName,
+        }
+      }
+
+      const { error } = await table
+        .select(getValidationSelect(tableName), { count: 'exact', head: true })
+        .limit(1)
+
+      return {
+        error,
+        table: tableName,
+      }
+    }),
+  )
+  const failedCheck = checks.find((check) => check.error)
+
+  if (failedCheck) {
+    throw withTableContext(failedCheck.error, failedCheck.table)
+  }
+
+  logCloudSyncInfo('Supabase REST validou as tabelas do Fluxo.', {
+    schema: SUPABASE_SCHEMA,
+    tables: FLUXO_DATA_TABLES,
+  })
+
+  return checks
 }
 
 export async function fetchDatasetFromCloud(dataset) {
@@ -118,14 +192,19 @@ export async function fetchDatasetFromCloud(dataset) {
     return null
   }
 
-  const { data, error } = await supabase
-    .from(config.table)
+  const table = fromPublicTable(config.table)
+
+  if (!table) {
+    return null
+  }
+
+  const { data, error } = await table
     .select(config.select)
     .eq('user_id', user.id)
     .order('sort_order', { ascending: true })
 
   if (error) {
-    throw error
+    throw withTableContext(error, config.table)
   }
 
   return config.deserialize(data ?? [])
@@ -134,12 +213,10 @@ export async function fetchDatasetFromCloud(dataset) {
 export async function saveDatasetToCloud(dataset, state, { silent = true } = {}) {
   const config = datasetConfig[dataset]
   const user = await getCurrentUser()
+  const unavailableResult = getCloudSyncUnavailableResult()
 
-  if (!config || !user || !canUseCloudSync()) {
-    return {
-      message: 'Modo local ativo.',
-      state: 'local',
-    }
+  if (!config || !user || unavailableResult) {
+    return unavailableResult ?? createLocalStatus('Modo local ativo.', 'local')
   }
 
   const rows = config.serialize(state, user.id)
@@ -149,22 +226,23 @@ export async function saveDatasetToCloud(dataset, state, { silent = true } = {})
     state: 'syncing',
   })
 
-  const { error: deleteError } = await supabase
-    .from(config.table)
+  const deleteTable = fromPublicTable(config.table)
+  const { error: deleteError } = await deleteTable
     .delete()
     .eq('user_id', user.id)
 
   if (deleteError) {
-    throw deleteError
+    throw withTableContext(deleteError, config.table)
   }
 
   if (rows.length > 0) {
-    const { error: insertError } = await supabase.from(config.table).upsert(rows, {
+    const upsertTable = fromPublicTable(config.table)
+    const { error: insertError } = await upsertTable.upsert(rows, {
       onConflict: config.conflict,
     })
 
     if (insertError) {
-      throw insertError
+      throw withTableContext(insertError, config.table)
     }
   }
 
@@ -188,19 +266,31 @@ export async function saveDatasetToCloud(dataset, state, { silent = true } = {})
 }
 
 export function canUseCloudSync() {
-  if (!cloudSyncAccess.enabled) {
-    return false
+  return !getCloudSyncUnavailableResult()
+}
+
+export function handleCloudSyncError(error, { shouldToast = true } = {}) {
+  const diagnosis = diagnoseCloudSyncError(error)
+
+  if (diagnosis.disablesSync) {
+    cloudDatabaseAccess = {
+      message: diagnosis.message,
+      ready: false,
+      reason: diagnosis.reason,
+    }
+    clearCloudSyncQueue()
   }
 
-  if (!isSupabaseConfigured || !supabase) {
-    return false
+  const result = createLocalStatus(diagnosis.message, diagnosis.reason)
+
+  publishSyncStatus(result)
+  logCloudSyncDiagnostic(error, diagnosis)
+
+  if (shouldToast) {
+    emitThrottledSyncErrorToast(diagnosis)
   }
 
-  if (typeof navigator === 'undefined') {
-    return true
-  }
-
-  return navigator.onLine
+  return result
 }
 
 export function publishSyncStatus(detail) {
@@ -228,6 +318,32 @@ function createSimpleDatasetConfig(table, stateKey) {
         userId,
       }),
     table,
+  }
+}
+
+async function runQueuedCloudSync(dataset, state) {
+  syncTimers.delete(dataset)
+
+  if (activeSyncs.has(dataset)) {
+    pendingSyncStates.set(dataset, state)
+    return
+  }
+
+  activeSyncs.add(dataset)
+
+  try {
+    await saveDatasetToCloud(dataset, state)
+  } catch (error) {
+    handleCloudSyncError(error)
+  } finally {
+    activeSyncs.delete(dataset)
+
+    const pendingState = pendingSyncStates.get(dataset)
+    pendingSyncStates.delete(dataset)
+
+    if (pendingState && canUseCloudSync()) {
+      queueCloudStateSync(dataset, pendingState)
+    }
   }
 }
 
@@ -268,23 +384,169 @@ async function getCurrentUser() {
   return data.user
 }
 
-function reportSyncError(error) {
-  publishSyncStatus({
-    message: 'Não foi possível sincronizar. O fallback local está ativo.',
+function getCloudSyncUnavailableResult() {
+  if (!cloudSyncAccess.enabled) {
+    return createLocalStatus(cloudSyncAccess.message, 'access-disabled')
+  }
+
+  if (!cloudDatabaseAccess.ready) {
+    return createLocalStatus(cloudDatabaseAccess.message, cloudDatabaseAccess.reason)
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    return createLocalStatus(
+      'Modo local ativo. Configure o Supabase para sincronizar.',
+      'supabase-env-missing',
+    )
+  }
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return createLocalStatus('Modo local ativo. A nuvem volta quando houver conexão.', 'offline')
+  }
+
+  return null
+}
+
+function createLocalStatus(message, reason) {
+  return {
+    message,
+    reason,
     state: 'local',
-  })
+  }
+}
+
+function getValidationSelect(tableName) {
+  return tableName === 'cards'
+    ? 'local_id,record_type,data,sort_order,updated_at'
+    : 'local_id,data,sort_order,updated_at'
+}
+
+function diagnoseCloudSyncError(error) {
+  if (isSchemaSetupError(error)) {
+    return {
+      description:
+        'Rode supabase/fluxo_schema.sql e recarregue o schema cache do PostgREST.',
+      disablesSync: true,
+      message: DATABASE_NOT_CONFIGURED_MESSAGE,
+      reason: 'database-unconfigured',
+      title: 'Banco ainda não configurado',
+    }
+  }
+
+  if (isPermissionError(error)) {
+    return {
+      description: 'Revise grants e políticas RLS do supabase/fluxo_schema.sql.',
+      disablesSync: true,
+      message: DATABASE_PERMISSION_MESSAGE,
+      reason: 'database-permissions',
+      title: 'Permissões do banco bloqueando o sync',
+    }
+  }
+
+  return {
+    description: 'O app seguirá salvando localmente e tentará novamente quando possível.',
+    disablesSync: false,
+    message: 'Não foi possível sincronizar. O fallback local está ativo.',
+    reason: 'sync-error',
+    title: 'Sincronização em modo local',
+  }
+}
+
+function isSchemaSetupError(error) {
+  const code = String(error?.code ?? '')
+  const text = getErrorText(error)
+
+  return (
+    code === 'PGRST205' ||
+    code === 'PGRST204' ||
+    code === 'PGRST106' ||
+    code === '42P01' ||
+    code === '3F000' ||
+    /schema cache/i.test(text) ||
+    /could not find the table/i.test(text) ||
+    /could not find .* column/i.test(text) ||
+    /relation .* does not exist/i.test(text) ||
+    /schema .* does not exist/i.test(text)
+  )
+}
+
+function isPermissionError(error) {
+  const code = String(error?.code ?? '')
+  const text = getErrorText(error)
+
+  return (
+    code === '42501' ||
+    /permission denied/i.test(text) ||
+    /row-level security/i.test(text) ||
+    /violates row-level security/i.test(text)
+  )
+}
+
+function getErrorText(error) {
+  return [
+    error?.code,
+    error?.message,
+    error?.details,
+    error?.hint,
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+function withTableContext(error, tableName) {
+  if (error && typeof error === 'object') {
+    error.fluxoTable = tableName
+    return error
+  }
+
+  const nextError = new Error(String(error ?? 'Erro de sincronização.'))
+  nextError.fluxoTable = tableName
+  return nextError
+}
+
+function emitThrottledSyncErrorToast(diagnosis) {
+  const now = Date.now()
+
+  if (
+    lastSyncErrorToast.key === diagnosis.reason &&
+    now - lastSyncErrorToast.shownAt < SYNC_ERROR_TOAST_INTERVAL
+  ) {
+    return
+  }
+
+  lastSyncErrorToast = {
+    key: diagnosis.reason,
+    shownAt: now,
+  }
 
   emitToast({
-    description: getErrorMessage(error),
-    title: 'Sincronização em modo local',
+    description: diagnosis.description,
+    title: diagnosis.title,
     tone: 'warning',
   })
 }
 
-function getErrorMessage(error) {
-  if (!error?.message) {
-    return 'Confira as tabelas e políticas no Supabase.'
+function logCloudSyncDiagnostic(error, diagnosis) {
+  if (typeof console === 'undefined') {
+    return
   }
 
-  return error.message
+  console.warn('[Fluxo Sync] Supabase em modo local.', {
+    code: error?.code,
+    details: error?.details,
+    hint: error?.hint,
+    message: error?.message,
+    reason: diagnosis.reason,
+    schema: SUPABASE_SCHEMA,
+    table: error?.fluxoTable,
+    tables: FLUXO_DATA_TABLES,
+  })
+}
+
+function logCloudSyncInfo(message, detail) {
+  if (typeof console === 'undefined') {
+    return
+  }
+
+  console.info('[Fluxo Sync]', message, detail)
 }

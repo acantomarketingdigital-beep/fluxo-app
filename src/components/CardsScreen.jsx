@@ -4,11 +4,10 @@ import { ManagedCardList } from './ManagedCardList'
 import { PurchaseForm } from './PurchaseForm'
 import { PurchaseHistory } from './PurchaseHistory'
 import { Topbar } from './Topbar'
-import { initialCards } from '../data/cards'
 import {
   createInvoiceReference,
   loadCardsState,
-  resetCardsDemoData,
+  resetCardsData,
   rollInstallmentsIntoNextInvoice,
   saveCardsState,
 } from '../storage/cardsStorage'
@@ -19,7 +18,7 @@ import {
 import { useToast } from '../hooks/useToast'
 
 const initialFormData = {
-  cardId: initialCards[0].id,
+  cardId: '',
   description: '',
   amount: '',
   purchaseType: 'cash',
@@ -256,25 +255,28 @@ export function CardsScreen({ onNavigate, productAccess }) {
 
   function handleResetData() {
     const confirmed = window.confirm(
-      'Resetar os dados? Isso apaga compras e ajustes salvos neste navegador e restaura os dados de demonstração.',
+      'Apagar todos os cartões e compras salvos neste navegador?',
     )
 
     if (!confirmed) {
       return
     }
 
-    const demoState = resetCardsDemoData()
-
-    setCardsState(demoState)
-    setFormData({
-      ...initialFormData,
-      cardId: demoState.cards[0].id,
-    })
-    setStatusMessage('Dados de demonstração restaurados.')
+    setCardsState(resetCardsData())
+    setFormData(initialFormData)
+    setStatusMessage('Cartões e compras apagados.')
     addToast({
-      description: 'Cartões e compras voltaram ao estado inicial.',
-      title: 'Cartões resetados',
+      description: 'Cartões e compras foram removidos.',
+      title: 'Cartões zerados',
       tone: 'success',
+    })
+  }
+
+  function handleAddCard() {
+    addToast({
+      description: 'O cadastro manual de cartões chegará em breve.',
+      title: 'Em breve',
+      tone: 'warning',
     })
   }
 
@@ -301,6 +303,7 @@ export function CardsScreen({ onNavigate, productAccess }) {
         cards={visibleCards}
         formatCurrency={formatCurrency}
         formatDate={formatShortDate}
+        onAddCard={handleAddCard}
         onPayInvoice={handlePayInvoice}
         onSelect={handleCardSelect}
         selectedCardId={purchaseFormData.cardId}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AuthContext } from '../context/authContext'
 import { createProductAccess, isOnboardingComplete } from '../lib/productAccess'
 import { emitToast } from '../lib/toastEvents'
-import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { fromPublicTable, isSupabaseConfigured, supabase } from '../lib/supabase'
 import { setCloudSyncAccess } from '../storage/cloudSyncQueue'
 import {
   prepareCloudBackedStorage,
@@ -66,6 +66,7 @@ export function AuthProvider({ children }) {
     } catch (error) {
       const result = {
         message: 'Não foi possível sincronizar. O fallback local está ativo.',
+        reason: 'sync-error',
         state: 'local',
       }
       setSyncStatus(result)
@@ -151,6 +152,14 @@ export function AuthProvider({ children }) {
     async function handleOnline() {
       const result = await pushLocalStorageToCloud()
       setSyncStatus(result)
+
+      if (
+        result.reason === 'database-unconfigured' ||
+        result.reason === 'database-permissions'
+      ) {
+        return
+      }
+
       emitToast({
         description:
           result.state === 'synced'
@@ -375,8 +384,13 @@ async function loadBillingProfile(userId) {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('profiles')
+    const profilesTable = fromPublicTable('profiles')
+
+    if (!profilesTable) {
+      return {}
+    }
+
+    const { data, error } = await profilesTable
       .select(
         'account_created_at, plan_interval, stripe_customer_id, subscription_status, trial_ends_at',
       )

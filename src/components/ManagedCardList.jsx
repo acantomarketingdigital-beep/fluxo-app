@@ -2,6 +2,7 @@ export function ManagedCardList({
   cards,
   formatCurrency,
   formatDate,
+  onAddCard,
   onPayInvoice,
   selectedCardId,
   onSelect,
@@ -10,8 +11,13 @@ export function ManagedCardList({
     <section className="managed-card-grid" aria-label="Cartões cadastrados">
       {cards.length === 0 ? (
         <article className="empty-state compact-empty-state">
-          <strong>Nenhum cartão cadastrado</strong>
-          <span>Restaure os dados de demonstração ou adicione cartões quando essa etapa estiver ativa.</span>
+          <strong>Nenhum cartão cadastrado ainda</strong>
+          <span>Adicione um cartão para registrar compras e acompanhar faturas.</span>
+          {onAddCard ? (
+            <button className="ghost-action" onClick={onAddCard} type="button">
+              Adicionar cartão
+            </button>
+          ) : null}
         </article>
       ) : null}
 

@@ -8,9 +8,10 @@ Guia final de publicação: [DEPLOY_CHECKLIST.md](./DEPLOY_CHECKLIST.md).
 
 1. Crie um projeto no Supabase.
 2. Abra o SQL Editor e execute `supabase/fluxo_schema.sql`.
-3. Execute também `supabase/billing_schema.sql` para criar `profiles` e `subscriptions`.
-4. Copie `.env.example` para `.env`.
-5. Preencha:
+3. Execute `supabase/validate_fluxo_schema.sql` e confirme que as quatro tabelas existem em `public`, com RLS, grants e policies.
+4. Execute também `supabase/billing_schema.sql` para criar `profiles` e `subscriptions`.
+5. Copie `.env.example` para `.env`.
+6. Preencha:
 
 ```bash
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
@@ -146,3 +147,28 @@ iPhone/Safari: abra a URL, toque em Compartilhar e escolha "Adicionar à Tela de
 npm run lint
 npm run build
 ```
+
+## Teste manual — workspace zerado
+
+### Testar usuário novo
+
+1. Abra o app em aba anônima ou com outro e-mail.
+2. Crie uma conta nova e conclua o onboarding.
+3. Confirme que cada seção está vazia:
+   - **Visão geral**: saldo em mãos R$ 0,00, sem receitas nem despesas.
+   - **Receitas**: lista vazia, sem valores mockados.
+   - **Despesas**: lista vazia.
+   - **Cartões**: empty state "Nenhum cartão cadastrado ainda" com botão "Adicionar cartão".
+   - **Transações**: lista vazia.
+   - **Relatórios**: gráficos/resumos zerados.
+4. Recarregue a página (`F5`) e confirme que tudo permanece zerado.
+
+### Testar reset total
+
+1. Faça login com uma conta que já possui dados.
+2. Acesse **Configurações > Zerar todos os dados** e confirme digitando `ZERAR`.
+3. O app deve navegar para "Visão geral" com workspace completamente zerado.
+4. Recarregue a página e confirme:
+   - Nenhum dado aparece (nem localStorage nem Supabase).
+   - O app não recria dados de demonstração automaticamente.
+5. Faça logout e login novamente — o workspace deve continuar zerado.

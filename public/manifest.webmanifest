@@ -3,14 +3,16 @@
   "short_name": "Fluxo",
   "id": "/",
   "description": "Controle financeiro com receitas, despesas, cartões e transações.",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "lang": "pt-BR",
+  "dir": "ltr",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "browser"],
   "background_color": "#05130f",
   "theme_color": "#0f7a4f",
   "orientation": "portrait-primary",
+  "prefer_related_applications": false,
   "categories": ["finance", "productivity"],
   "icons": [
     {

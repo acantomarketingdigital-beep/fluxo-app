@@ -88,6 +88,7 @@ alter table public.expenses enable row level security;
 alter table public.cards enable row level security;
 alter table public.transactions enable row level security;
 
+grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.incomes to authenticated;
 grant select, insert, update, delete on public.expenses to authenticated;
 grant select, insert, update, delete on public.cards to authenticated;
@@ -192,3 +193,5 @@ create policy "transactions_delete_own"
   on public.transactions for delete
   to authenticated
   using ((select auth.uid()) = user_id);
+
+notify pgrst, 'reload schema';

@@ -1,4 +1,3 @@
-import { initialCards, initialPurchases } from '../data/cards.js'
 import { queueCloudStateSync } from './cloudSyncQueue'
 import {
   readScopedStorageItem,
@@ -11,8 +10,8 @@ const STORAGE_VERSION = 1
 
 export function createInitialCardsState() {
   return {
-    cards: initialCards.map(normalizeCard),
-    purchases: initialPurchases.map(normalizePurchase),
+    cards: [],
+    purchases: [],
   }
 }
 
@@ -55,14 +54,10 @@ function normalizeCard(card) {
 
 function normalizePurchase(purchase) {
   const installments = Number(purchase.installments) || 1
-  const cardId =
-    purchase.cardId ??
-    initialCards.find((card) => card.name === purchase.cardName)?.id ??
-    ''
 
   return {
     ...purchase,
-    cardId,
+    cardId: purchase.cardId ?? '',
     amount: normalizeAmount(purchase.amount),
     invoiceCharge: normalizeAmount(purchase.invoiceCharge),
     installments,
@@ -106,12 +101,12 @@ export function saveCardsStateLocal({ cards, purchases }) {
   }
 }
 
-export function resetCardsDemoData() {
+export function resetCardsData() {
   if (typeof window !== 'undefined') {
     try {
       removeScopedStorageItem(STORAGE_KEY)
     } catch {
-      // Same fallback posture as saving: reset in memory even if storage is blocked.
+      // Reset in memory even if storage is blocked.
     }
   }
 

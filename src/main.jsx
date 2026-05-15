@@ -4,9 +4,10 @@ import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './components/AuthProvider.jsx'
 import { ToastProvider } from './components/ToastProvider.jsx'
-import { registerServiceWorker } from './pwa.js'
+import { registerPwaInstallPromptDiagnostics, registerServiceWorker } from './pwa.js'
 
 registerServiceWorker()
+registerPwaInstallPromptDiagnostics()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

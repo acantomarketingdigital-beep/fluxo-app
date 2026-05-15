@@ -4,8 +4,10 @@ import {
   canUseCloudSync,
   fetchDatasetFromCloud,
   getCloudSyncAccess,
+  handleCloudSyncError,
   publishSyncStatus,
   saveDatasetToCloud,
+  validateFluxoCloudSchema,
 } from './cloudSyncQueue'
 import {
   loadCardsState,
@@ -79,20 +81,26 @@ export async function prepareCloudBackedStorage(userId) {
   let pulledFromCloud = 0
   let seededCloud = 0
 
-  for (const dataset of datasets) {
-    const cloudState = await fetchDatasetFromCloud(dataset.name)
+  try {
+    await validateFluxoCloudSchema()
 
-    if (cloudState && dataset.hasData(cloudState)) {
-      dataset.saveLocal(cloudState)
-      pulledFromCloud += 1
-    } else {
-      const localState = dataset.loadLocal()
+    for (const dataset of datasets) {
+      const cloudState = await fetchDatasetFromCloud(dataset.name)
 
-      if (dataset.hasData(localState)) {
-        await saveDatasetToCloud(dataset.name, localState)
-        seededCloud += 1
+      if (cloudState && dataset.hasData(cloudState)) {
+        dataset.saveLocal(cloudState)
+        pulledFromCloud += 1
+      } else {
+        const localState = dataset.loadLocal()
+
+        if (dataset.hasData(localState)) {
+          await saveDatasetToCloud(dataset.name, localState)
+          seededCloud += 1
+        }
       }
     }
+  } catch (error) {
+    return handleCloudSyncError(error)
   }
 
   const result = {
@@ -130,8 +138,14 @@ export async function pushLocalStorageToCloud() {
     return result
   }
 
-  for (const dataset of datasets) {
-    await saveDatasetToCloud(dataset.name, dataset.loadLocal())
+  try {
+    await validateFluxoCloudSchema()
+
+    for (const dataset of datasets) {
+      await saveDatasetToCloud(dataset.name, dataset.loadLocal())
+    }
+  } catch (error) {
+    return handleCloudSyncError(error, { shouldToast: false })
   }
 
   const result = {

@@ -1,4 +1,3 @@
-import { initialExpenses } from '../data/expenses'
 import { queueCloudStateSync } from './cloudSyncQueue'
 import {
   readScopedStorageItem,
@@ -11,7 +10,7 @@ const STORAGE_VERSION = 1
 
 export function createInitialExpensesState() {
   return {
-    expenses: initialExpenses.map((expense) => ({ ...expense })),
+    expenses: [],
   }
 }
 
@@ -64,7 +63,7 @@ export function saveExpensesStateLocal({ expenses }) {
   }
 }
 
-export function resetExpensesDemoData() {
+export function resetExpensesData() {
   if (typeof window !== 'undefined') {
     try {
       removeScopedStorageItem(STORAGE_KEY)

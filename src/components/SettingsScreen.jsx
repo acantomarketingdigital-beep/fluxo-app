@@ -7,27 +7,31 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from '../hooks/useToast'
 import { openBillingPortal } from '../lib/billing'
+import {
+  PWA_INSTALL_STATE_EVENT,
+  getPwaInstallState,
+  logPwaInstallDiagnostics,
+  promptPwaInstall,
+} from '../pwa'
 import { useEffect, useState } from 'react'
 
 export function SettingsScreen({ onNavigate }) {
   const { productAccess, signOut, syncStatus, user } = useAuth()
   const { addToast } = useToast()
   const [isPortalLoading, setIsPortalLoading] = useState(false)
-  const [installPrompt, setInstallPrompt] = useState(null)
-  const [isStandalone, setIsStandalone] = useState(() => isAppInstalled())
+  const [pwaInstallState, setPwaInstallState] = useState(() => getPwaInstallState())
   const [isResettingAll, setIsResettingAll] = useState(false)
   const [isResettingLocal, setIsResettingLocal] = useState(false)
   const profileName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuário'
+  const canPromptInstall = pwaInstallState.canPrompt && !pwaInstallState.isStandalone
 
   useEffect(() => {
-    function handleBeforeInstallPrompt(event) {
-      event.preventDefault()
-      setInstallPrompt(event)
+    function handleInstallState(event) {
+      setPwaInstallState(event.detail ?? getPwaInstallState())
     }
 
     function handleAppInstalled() {
-      setInstallPrompt(null)
-      setIsStandalone(true)
+      setPwaInstallState(getPwaInstallState())
       addToast({
         description: 'O Fluxo foi instalado neste dispositivo.',
         title: 'App instalado',
@@ -35,11 +39,11 @@ export function SettingsScreen({ onNavigate }) {
       })
     }
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    window.addEventListener(PWA_INSTALL_STATE_EVENT, handleInstallState)
     window.addEventListener('appinstalled', handleAppInstalled)
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+      window.removeEventListener(PWA_INSTALL_STATE_EVENT, handleInstallState)
       window.removeEventListener('appinstalled', handleAppInstalled)
     }
   }, [addToast])
@@ -176,7 +180,7 @@ export function SettingsScreen({ onNavigate }) {
   }
 
   async function handleInstallApp() {
-    if (isStandalone) {
+    if (pwaInstallState.isStandalone) {
       addToast({
         description: 'O Fluxo já está aberto como app instalado neste dispositivo.',
         title: 'App já instalado',
@@ -185,19 +189,20 @@ export function SettingsScreen({ onNavigate }) {
       return
     }
 
-    if (!installPrompt) {
+    if (!canPromptInstall) {
+      logPwaInstallDiagnostics('settings-install-button-unavailable')
+      setPwaInstallState(getPwaInstallState())
       addToast({
         description:
-          'Android Chrome: menu > Instalar app. iPhone Safari: compartilhar > Adicionar à Tela de Início.',
-        title: 'Instalar app',
+          'O navegador ainda não liberou o prompt. Veja o diagnóstico no console.',
+        title: 'Instalação indisponível',
         tone: 'warning',
       })
       return
     }
 
-    installPrompt.prompt()
-    const choice = await installPrompt.userChoice
-    setInstallPrompt(null)
+    const choice = await promptPwaInstall()
+    setPwaInstallState(getPwaInstallState())
 
     addToast({
       description:
@@ -207,6 +212,11 @@ export function SettingsScreen({ onNavigate }) {
       title: choice?.outcome === 'accepted' ? 'Instalando Fluxo' : 'Instalação cancelada',
       tone: choice?.outcome === 'accepted' ? 'success' : 'warning',
     })
+  }
+
+  function handleLogInstallDiagnostics() {
+    logPwaInstallDiagnostics('settings-manual-check')
+    setPwaInstallState(getPwaInstallState())
   }
 
   return (
@@ -271,17 +281,29 @@ export function SettingsScreen({ onNavigate }) {
             </div>
           </div>
           <p className="settings-panel-copy">
-            {isStandalone
+            {pwaInstallState.isStandalone
               ? 'O Fluxo já está rodando em modo app neste dispositivo.'
-              : 'Use o botão quando o navegador liberar a instalação, ou siga o caminho manual no celular.'}
+              : canPromptInstall
+                ? 'A instalação automática está disponível neste navegador.'
+                : 'Use o caminho manual no celular enquanto o navegador não libera o prompt automático.'}
           </p>
           <div className="settings-help-list">
             <span>Android Chrome: menu &gt; Instalar app</span>
             <span>iPhone Safari: compartilhar &gt; Adicionar à Tela de Início</span>
           </div>
-          <button className="primary-action settings-billing-action" onClick={handleInstallApp} type="button">
-            Instalar app
-          </button>
+          <div className="settings-actions settings-install-actions">
+            <button
+              className="primary-action settings-billing-action"
+              disabled={!canPromptInstall && !pwaInstallState.isStandalone}
+              onClick={handleInstallApp}
+              type="button"
+            >
+              {pwaInstallState.isStandalone ? 'App instalado' : 'Instalar app'}
+            </button>
+            <button className="ghost-action settings-secondary-action" onClick={handleLogInstallDiagnostics} type="button">
+              Verificar instalação
+            </button>
+          </div>
         </article>
 
         <article className="settings-panel">
@@ -382,15 +404,4 @@ function formatBillingStatus(status) {
 
 function isNoActiveSubscriptionError(error) {
   return error?.status === 404 || error?.message === 'Você ainda não possui assinatura ativa.'
-}
-
-function isAppInstalled() {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    window.navigator.standalone === true
-  )
 }

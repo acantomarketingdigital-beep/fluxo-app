@@ -11,7 +11,7 @@ import {
 } from '../data/expenses'
 import {
   loadExpensesState,
-  resetExpensesDemoData,
+  resetExpensesData,
   saveExpensesState,
 } from '../storage/expensesStorage'
 import {
@@ -208,19 +208,19 @@ export function ExpenseScreen() {
 
   function handleResetExpenses() {
     const confirmed = window.confirm(
-      'Resetar despesas? Isso apaga as despesas salvas neste navegador e restaura os dados de demonstração.',
+      'Apagar todas as despesas salvas neste navegador?',
     )
 
     if (!confirmed) {
       return
     }
 
-    setExpensesState(resetExpensesDemoData())
+    setExpensesState(resetExpensesData())
     setFormData(initialFormData)
-    setStatusMessage('Despesas de demonstração restauradas.')
+    setStatusMessage('Despesas apagadas.')
     addToast({
-      description: 'Os dados iniciais foram restaurados.',
-      title: 'Despesas resetadas',
+      description: 'Todas as despesas foram removidas.',
+      title: 'Despesas zeradas',
       tone: 'success',
     })
   }

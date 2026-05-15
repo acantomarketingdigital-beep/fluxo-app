@@ -1,4 +1,3 @@
-import { initialIncomes } from '../data/incomes'
 import { queueCloudStateSync } from './cloudSyncQueue'
 import {
   readScopedStorageItem,
@@ -11,7 +10,7 @@ const STORAGE_VERSION = 1
 
 export function createInitialIncomesState() {
   return {
-    incomes: initialIncomes.map((income) => ({ ...income })),
+    incomes: [],
   }
 }
 
@@ -64,12 +63,12 @@ export function saveIncomesStateLocal({ incomes }) {
   }
 }
 
-export function resetIncomesDemoData() {
+export function resetIncomesData() {
   if (typeof window !== 'undefined') {
     try {
       removeScopedStorageItem(STORAGE_KEY)
     } catch {
-      // Still return demo data for the in-memory reset.
+      // Keep the in-memory reset working when storage cannot be changed.
     }
   }
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fluxo-beta-v4'
+const CACHE_NAME = 'fluxo-beta-v5'
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',

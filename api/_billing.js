@@ -20,6 +20,9 @@ export function createSupabaseAdminClient() {
         autoRefreshToken: false,
         persistSession: false,
       },
+      db: {
+        schema: 'public',
+      },
     },
   )
 }

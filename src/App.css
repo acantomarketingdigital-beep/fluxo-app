@@ -2890,6 +2890,17 @@
   margin-top: 16px;
 }
 
+.settings-install-actions {
+  align-items: stretch;
+  margin-top: 16px;
+}
+
+.settings-install-actions .settings-billing-action {
+  flex: 1 1 220px;
+  width: auto;
+  margin-top: 0;
+}
+
 .onboarding-shell {
   display: grid;
   min-height: 100svh;
