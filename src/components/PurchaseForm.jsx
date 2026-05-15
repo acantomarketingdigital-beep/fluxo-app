@@ -10,6 +10,8 @@ export function PurchaseForm({
   const amount = parseBrazilianAmount(formData.amount)
   const installments = Number(formData.installments)
   const monthlyCharge = formData.purchaseType === 'installment' ? amount / installments : amount
+  const hasCards = cards.length > 0 && Boolean(selectedCard)
+  const selectedAvailableLimit = selectedCard?.availableLimit ?? 0
 
   return (
     <section className="panel purchase-form-panel">
@@ -23,7 +25,8 @@ export function PurchaseForm({
       <form className="purchase-form" onSubmit={onSubmit}>
         <label className="form-field">
           <span>Cart&atilde;o</span>
-          <select name="cardId" onChange={onChange} value={formData.cardId}>
+          <select disabled={!hasCards} name="cardId" onChange={onChange} value={hasCards ? formData.cardId : ''}>
+            {!hasCards ? <option value="">Nenhum cartão cadastrado</option> : null}
             {cards.map((card) => (
               <option key={card.id} value={card.id}>
                 {card.name}
@@ -119,13 +122,18 @@ export function PurchaseForm({
           </div>
           <div>
             <span>Dispon&iacute;vel no cart&atilde;o</span>
-            <strong>{formatCurrency(selectedCard.availableLimit)}</strong>
+            <strong>{formatCurrency(selectedAvailableLimit)}</strong>
           </div>
         </div>
 
+        {!hasCards ? (
+          <p className="form-status">
+            Nenhum cartão disponível. Cadastre ou restaure cartões antes de registrar compras.
+          </p>
+        ) : null}
         {statusMessage ? <p className="form-status">{statusMessage}</p> : null}
 
-        <button className="primary-action form-submit" type="submit">
+        <button className="primary-action form-submit" disabled={!hasCards} type="submit">
           Registrar compra
         </button>
       </form>

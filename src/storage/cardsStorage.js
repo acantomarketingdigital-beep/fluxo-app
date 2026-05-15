@@ -154,7 +154,6 @@ function isValidCardsState(state) {
   return (
     state &&
     Array.isArray(state.cards) &&
-    state.cards.length > 0 &&
     Array.isArray(state.purchases)
   )
 }

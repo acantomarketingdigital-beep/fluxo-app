@@ -1,10 +1,23 @@
-import { initialCards } from '../data/cards'
-import { loadCardsState, saveCardsState } from './cardsStorage'
-import { loadExpensesState, saveExpensesState } from './expensesStorage'
-import { loadIncomesState, saveIncomesState } from './incomesStorage'
-import { loadTransactionsState, saveTransactionsState } from './transactionsStorage'
+import { loadCardsState, saveCardsStateLocal } from './cardsStorage'
+import {
+  clearCloudSyncQueue,
+  deleteCloudDataForCurrentUser,
+  publishSyncStatus,
+} from './cloudSyncQueue'
+import { loadExpensesState, saveExpensesStateLocal } from './expensesStorage'
+import { loadIncomesState, saveIncomesStateLocal } from './incomesStorage'
+import { loadTransactionsState, saveTransactionsStateLocal } from './transactionsStorage'
+import { removeFluxoLocalStorageItems } from './storageSession'
 
 export const APP_VERSION = '0.2.0-beta'
+
+const EMPTY_FLUXO_STATE = {
+  cards: [],
+  expenses: [],
+  incomes: [],
+  purchases: [],
+  transactions: [],
+}
 
 export function loadFluxoSnapshot() {
   return {
@@ -34,17 +47,46 @@ export function exportFluxoData() {
 }
 
 export function clearFluxoData() {
-  saveIncomesState({ incomes: [] })
-  saveExpensesState({ expenses: [] })
-  saveTransactionsState({ transactions: [] })
-  saveCardsState({
-    cards: initialCards.map((card) => ({
-      ...card,
-      availableLimit: card.totalLimit,
-      invoice: 0,
-      invoiceCycle: 0,
-    })),
-    purchases: [],
+  clearFluxoLocalData()
+}
+
+export function clearFluxoLocalData() {
+  clearCloudSyncQueue()
+  removeFluxoLocalStorageItems()
+  saveEmptyFluxoLocalState()
+}
+
+export async function resetFluxoTestData({ includeCloud = false } = {}) {
+  clearFluxoLocalData()
+
+  if (!includeCloud) {
+    publishSyncStatus({
+      message: 'Dados locais zerados.',
+      state: 'local',
+    })
+
+    return {
+      cloud: null,
+      local: true,
+    }
+  }
+
+  const cloudResult = await deleteCloudDataForCurrentUser()
+  publishSyncStatus(cloudResult)
+
+  return {
+    cloud: cloudResult,
+    local: true,
+  }
+}
+
+function saveEmptyFluxoLocalState() {
+  saveIncomesStateLocal({ incomes: EMPTY_FLUXO_STATE.incomes })
+  saveExpensesStateLocal({ expenses: EMPTY_FLUXO_STATE.expenses })
+  saveTransactionsStateLocal({ transactions: EMPTY_FLUXO_STATE.transactions })
+  saveCardsStateLocal({
+    cards: EMPTY_FLUXO_STATE.cards,
+    purchases: EMPTY_FLUXO_STATE.purchases,
   })
 }
 

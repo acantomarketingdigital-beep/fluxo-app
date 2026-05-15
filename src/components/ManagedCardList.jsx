@@ -8,8 +8,18 @@ export function ManagedCardList({
 }) {
   return (
     <section className="managed-card-grid" aria-label="Cartões cadastrados">
+      {cards.length === 0 ? (
+        <article className="empty-state compact-empty-state">
+          <strong>Nenhum cartão cadastrado</strong>
+          <span>Restaure os dados de demonstração ou adicione cartões quando essa etapa estiver ativa.</span>
+        </article>
+      ) : null}
+
       {cards.map((card) => {
-        const usedPercent = Math.round(((card.totalLimit - card.availableLimit) / card.totalLimit) * 100)
+        const usedPercent =
+          card.totalLimit > 0
+            ? Math.round(((card.totalLimit - card.availableLimit) / card.totalLimit) * 100)
+            : 0
 
         return (
           <article

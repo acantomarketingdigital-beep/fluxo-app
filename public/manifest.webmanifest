@@ -7,8 +7,9 @@
   "scope": "/",
   "lang": "pt-BR",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#013d25",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#05130f",
+  "theme_color": "#0f7a4f",
   "orientation": "portrait-primary",
   "categories": ["finance", "productivity"],
   "icons": [

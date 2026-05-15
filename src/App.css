@@ -1258,6 +1258,24 @@
   gap: 16px;
 }
 
+.empty-state {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.empty-state strong {
+  color: var(--text-strong);
+}
+
+.compact-empty-state {
+  grid-column: 1 / -1;
+}
+
 .credit-card {
   min-height: 190px;
   padding: 18px;
@@ -2799,6 +2817,38 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.settings-panel-copy {
+  margin: 0 0 16px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.settings-help-list {
+  display: grid;
+  gap: 8px;
+  color: rgba(245, 255, 249, 0.78);
+  font-size: 0.9rem;
+}
+
+.settings-help-list span {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.settings-danger-panel {
+  border-color: rgba(248, 113, 113, 0.26);
+  background:
+    linear-gradient(135deg, rgba(248, 113, 113, 0.08), rgba(255, 255, 255, 0.024)),
+    var(--surface-premium);
+}
+
+.settings-secondary-action {
+  min-height: 38px;
+  font-size: 0.9rem;
 }
 
 .danger-action:hover {

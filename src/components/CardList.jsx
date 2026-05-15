@@ -10,6 +10,12 @@ export function CardList({ cards }) {
       </div>
 
       <div className="credit-card-list">
+        {cards.length === 0 ? (
+          <article className="empty-state compact-empty-state">
+            <strong>Nenhum cartão cadastrado</strong>
+            <span>Use o painel de cartões para restaurar dados de demonstração quando precisar.</span>
+          </article>
+        ) : null}
         {cards.map((card) => (
           <article className={`credit-card credit-card-${card.variant}`} key={card.lastDigits}>
             <div className="credit-card-top">

@@ -40,7 +40,10 @@ async function postBillingRequest(path, body = {}) {
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new Error(data.error || 'Não foi possível conectar com a cobrança.')
+    const error = new Error(data.error || 'Não foi possível conectar com a cobrança.')
+    error.code = data.code
+    error.status = response.status
+    throw error
   }
 
   return data

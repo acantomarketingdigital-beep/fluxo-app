@@ -72,6 +72,44 @@ export function getCloudSyncAccess() {
   return cloudSyncAccess
 }
 
+export function clearCloudSyncQueue() {
+  if (typeof window === 'undefined') {
+    syncTimers.clear()
+    return
+  }
+
+  syncTimers.forEach((timer) => window.clearTimeout(timer))
+  syncTimers.clear()
+}
+
+export async function deleteCloudDataForCurrentUser() {
+  const user = await getCurrentUser()
+
+  if (!user || !supabase) {
+    return {
+      message: 'Modo local ativo.',
+      state: 'local',
+    }
+  }
+
+  const results = await Promise.all(
+    Object.values(datasetConfig).map((config) =>
+      supabase.from(config.table).delete().eq('user_id', user.id),
+    ),
+  )
+  const failedResult = results.find((result) => result.error)
+
+  if (failedResult) {
+    throw failedResult.error
+  }
+
+  return {
+    message: 'Dados removidos da nuvem.',
+    state: 'synced',
+    syncedAt: new Date().toISOString(),
+  }
+}
+
 export async function fetchDatasetFromCloud(dataset) {
   const config = datasetConfig[dataset]
   const user = await getCurrentUser()

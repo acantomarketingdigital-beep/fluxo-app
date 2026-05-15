@@ -4,8 +4,11 @@ export function registerServiceWorker() {
   }
 
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js').catch(() => {
-      // The app remains usable without offline cache.
-    })
+    navigator.serviceWorker
+      .register('/service-worker.js')
+      .then((registration) => registration.update())
+      .catch(() => {
+        // The app remains usable without offline cache.
+      })
   })
 }
