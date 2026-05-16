@@ -207,6 +207,7 @@ export async function fetchDatasetFromCloud(dataset) {
     throw withTableContext(error, config.table)
   }
 
+  logCloudSyncInfo(`PULL ${dataset}`, { rows: (data ?? []).length, userId: user.id })
   return config.deserialize(data ?? [])
 }
 
@@ -221,6 +222,7 @@ export async function saveDatasetToCloud(dataset, state, { silent = true } = {})
 
   const rows = config.serialize(state, user.id)
 
+  logCloudSyncInfo(`PUSH ${dataset}`, { rows: rows.length, userId: user.id })
   publishSyncStatus({
     message: 'Sincronizando com a nuvem...',
     state: 'syncing',
@@ -303,6 +305,14 @@ export function publishSyncStatus(detail) {
       detail,
     }),
   )
+}
+
+export function publishDataPulled() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.dispatchEvent(new CustomEvent('fluxo:data-pulled'))
 }
 
 function createSimpleDatasetConfig(table, stateKey) {

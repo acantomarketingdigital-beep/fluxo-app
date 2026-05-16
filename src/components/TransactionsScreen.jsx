@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Topbar } from './Topbar'
 import { loadTransactionsState } from '../storage/transactionsStorage'
+import { pullAllFromCloud } from '../storage/syncCoordinator'
+import { useToast } from '../hooks/useToast'
 
 const transactionTypeLabels = {
   entrada: 'Entrada',
@@ -17,6 +19,38 @@ export function TransactionsScreen() {
   const [transactionsState, setTransactionsState] = useState(loadTransactionsState)
   const [typeFilter, setTypeFilter] = useState('all')
   const [query, setQuery] = useState('')
+  const [isSyncing, setIsSyncing] = useState(false)
+  const { addToast } = useToast()
+
+  useEffect(() => {
+    function handleDataPulled() {
+      setTransactionsState(loadTransactionsState())
+    }
+
+    window.addEventListener('fluxo:data-pulled', handleDataPulled)
+    return () => window.removeEventListener('fluxo:data-pulled', handleDataPulled)
+  }, [])
+
+  const handleSyncNow = useCallback(async () => {
+    if (isSyncing) {
+      return
+    }
+
+    setIsSyncing(true)
+
+    try {
+      await pullAllFromCloud()
+      setTransactionsState(loadTransactionsState())
+    } catch {
+      addToast({
+        description: 'Não foi possível buscar dados do servidor.',
+        title: 'Erro na sincronização',
+        tone: 'warning',
+      })
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [addToast, isSyncing])
   const { transactions } = transactionsState
   const filteredTransactions = useMemo(
     () =>
@@ -48,9 +82,9 @@ export function TransactionsScreen() {
   return (
     <>
       <Topbar
-        actionLabel="Atualizar"
+        actionLabel={isSyncing ? 'Sincronizando...' : 'Sincronizar agora'}
         eyebrow="Transações"
-        onAction={() => setTransactionsState(loadTransactionsState())}
+        onAction={handleSyncNow}
         searchPlaceholder="Buscar movimentações"
         subtitle="Entradas e saídas registradas automaticamente"
         title="Movimentações"

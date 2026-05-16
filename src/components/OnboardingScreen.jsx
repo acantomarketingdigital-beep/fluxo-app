@@ -56,9 +56,11 @@ export function OnboardingScreen() {
     <main className="onboarding-shell">
       <section className="onboarding-hero">
         <div className="brand onboarding-brand">
-          <div className="brand-mark" aria-hidden="true">
-            F
-          </div>
+          <img
+            alt="Fluxo"
+            className="brand-logo-symbol"
+            src="/brand/fluxo-symbol.svg"
+          />
           <div>
             <strong>Fluxo</strong>
             <span>Beta premium</span>

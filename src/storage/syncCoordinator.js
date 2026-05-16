@@ -5,6 +5,7 @@ import {
   fetchDatasetFromCloud,
   getCloudSyncAccess,
   handleCloudSyncError,
+  publishDataPulled,
   publishSyncStatus,
   saveDatasetToCloud,
   validateFluxoCloudSchema,
@@ -121,6 +122,50 @@ export async function prepareCloudBackedStorage(userId) {
       tone: 'success',
     })
   }
+
+  return result
+}
+
+export async function pullAllFromCloud() {
+  if (!canUseCloudSync()) {
+    const syncAccess = getCloudSyncAccess()
+    const result = {
+      message: syncAccess.enabled
+        ? 'Sem conexão agora. Salvando localmente.'
+        : syncAccess.message,
+      pulled: 0,
+      state: 'local',
+    }
+    publishSyncStatus(result)
+    return result
+  }
+
+  let pulled = 0
+
+  try {
+    await validateFluxoCloudSchema()
+
+    for (const dataset of datasets) {
+      const cloudState = await fetchDatasetFromCloud(dataset.name)
+
+      if (cloudState !== null) {
+        dataset.saveLocal(cloudState)
+        pulled += 1
+      }
+    }
+  } catch (error) {
+    return handleCloudSyncError(error)
+  }
+
+  const result = {
+    message: pulled > 0 ? 'Dados carregados da nuvem.' : 'Nuvem sincronizada.',
+    pulled,
+    state: 'synced',
+    syncedAt: new Date().toISOString(),
+  }
+
+  publishSyncStatus(result)
+  publishDataPulled()
 
   return result
 }

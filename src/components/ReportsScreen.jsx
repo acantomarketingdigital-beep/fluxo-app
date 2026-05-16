@@ -1,11 +1,22 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { loadCardsState } from '../storage/cardsStorage'
 import { loadExpensesState } from '../storage/expensesStorage'
 import { loadIncomesState } from '../storage/incomesStorage'
 import { loadTransactionsState } from '../storage/transactionsStorage'
 
 export function ReportsScreen() {
-  const report = useMemo(() => createReport(), [])
+  const [reportData, setReportData] = useState(createReport)
+
+  useEffect(() => {
+    function handleDataPulled() {
+      setReportData(createReport())
+    }
+
+    window.addEventListener('fluxo:data-pulled', handleDataPulled)
+    return () => window.removeEventListener('fluxo:data-pulled', handleDataPulled)
+  }, [])
+
+  const report = useMemo(() => reportData, [reportData])
 
   return (
     <>

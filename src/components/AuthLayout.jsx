@@ -9,9 +9,11 @@ export function AuthLayout({ children }) {
           style={{ backgroundImage: `linear-gradient(135deg, rgba(5, 8, 7, 0.18), rgba(5, 8, 7, 0.76)), url(${heroImage})` }}
         />
         <div className="auth-brand">
-          <div className="brand-mark" aria-hidden="true">
-            F
-          </div>
+          <img
+            alt="Fluxo"
+            className="brand-logo-symbol"
+            src="/brand/fluxo-symbol.svg"
+          />
           <div>
             <strong>Fluxo</strong>
             <span>Finance OS</span>

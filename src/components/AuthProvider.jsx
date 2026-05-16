@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AuthContext } from '../context/authContext'
 import { createProductAccess, isOnboardingComplete } from '../lib/productAccess'
 import { emitToast } from '../lib/toastEvents'
-import { fromPublicTable, isSupabaseConfigured, supabase } from '../lib/supabase'
+import { FLUXO_DATA_TABLES, fromPublicTable, isSupabaseConfigured, supabase } from '../lib/supabase'
 import { setCloudSyncAccess } from '../storage/cloudSyncQueue'
 import {
   prepareCloudBackedStorage,
+  pullAllFromCloud,
   pushLocalStorageToCloud,
 } from '../storage/syncCoordinator'
 import { setStorageUser } from '../storage/storageSession'
@@ -174,6 +175,42 @@ export function AuthProvider({ children }) {
 
     return () => window.removeEventListener('online', handleOnline)
   }, [user])
+
+  useEffect(() => {
+    if (!user || !supabase || !productAccess.isPremium) {
+      return undefined
+    }
+
+    let pullTimer = null
+
+    function schedulePull() {
+      clearTimeout(pullTimer)
+      pullTimer = setTimeout(() => {
+        pullAllFromCloud().catch(() => {})
+      }, 1500)
+    }
+
+    const channel = supabase.channel(`fluxo-realtime-${user.id}`)
+
+    for (const table of FLUXO_DATA_TABLES) {
+      channel.on(
+        'postgres_changes',
+        { event: '*', filter: `user_id=eq.${user.id}`, schema: 'public', table },
+        schedulePull,
+      )
+    }
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.info('[Fluxo Realtime] Subscrito às tabelas do Fluxo.', { userId: user.id })
+      }
+    })
+
+    return () => {
+      clearTimeout(pullTimer)
+      supabase.removeChannel(channel)
+    }
+  }, [productAccess.isPremium, user])
 
   const signIn = useCallback(async ({ email, password }) => {
     if (!supabase) {
