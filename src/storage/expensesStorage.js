@@ -97,6 +97,10 @@ function normalizeExpense(expense) {
     alertTiming: expense.alertTiming ?? 'on_due',
     alertTime: expense.alertTime ?? '08:00',
     paidAt: expense.paidAt ?? '',
+    paymentMethod: expense.paymentMethod ?? 'other',
+    cardId: expense.cardId ?? '',
+    cardName: expense.cardName ?? '',
+    installmentGroupId: expense.installmentGroupId ?? '',
   }
 }
 

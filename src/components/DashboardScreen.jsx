@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CardList } from './CardList'
 import { CashFlowPanel } from './CashFlowPanel'
 import { PaymentList } from './PaymentList'
@@ -8,10 +8,14 @@ import { loadCardsState } from '../storage/cardsStorage'
 import { loadExpensesState } from '../storage/expensesStorage'
 import { loadIncomesState } from '../storage/incomesStorage'
 import { loadTransactionsState } from '../storage/transactionsStorage'
+import { pullAllFromCloud } from '../storage/syncCoordinator'
+import { useToast } from '../hooks/useToast'
 
 export function DashboardScreen() {
   const [dashboardData, setDashboardData] = useState(loadDashboardData)
   const [isLoading, setIsLoading] = useState(true)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const { addToast } = useToast()
 
   const dashboard = useMemo(() => createDashboardView(dashboardData), [dashboardData])
 
@@ -21,12 +25,51 @@ export function DashboardScreen() {
     return () => window.clearTimeout(timeoutId)
   }, [])
 
+  useEffect(() => {
+    function handleDataPulled() {
+      setDashboardData(loadDashboardData())
+    }
+
+    window.addEventListener('fluxo:data-pulled', handleDataPulled)
+    return () => window.removeEventListener('fluxo:data-pulled', handleDataPulled)
+  }, [])
+
+  const handleSyncNow = useCallback(async () => {
+    if (isSyncing) {
+      return
+    }
+
+    setIsSyncing(true)
+
+    try {
+      const result = await pullAllFromCloud()
+      setDashboardData(loadDashboardData())
+
+      addToast({
+        description:
+          result.state === 'synced'
+            ? 'Dados atualizados com a nuvem.'
+            : result.message,
+        title: result.state === 'synced' ? 'Sincronização concluída' : 'Modo local',
+        tone: result.state === 'synced' ? 'success' : 'warning',
+      })
+    } catch {
+      addToast({
+        description: 'Não foi possível buscar dados do servidor.',
+        title: 'Erro na sincronização',
+        tone: 'warning',
+      })
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [addToast, isSyncing])
+
   return (
     <>
       <Topbar
-        actionLabel="Atualizar visão"
+        actionLabel={isSyncing ? 'Sincronizando...' : 'Sincronizar agora'}
         eyebrow="Dashboard financeiro"
-        onAction={() => setDashboardData(loadDashboardData())}
+        onAction={handleSyncNow}
         searchPlaceholder="Buscar lançamentos"
         subtitle="Saldo real, entradas futuras e contas do mês"
         title="Visão geral do Fluxo"
@@ -123,10 +166,64 @@ function loadDashboardData() {
   }
 }
 
+function computeAccumulatedBalance(incomes, expenses) {
+  const monthKeys = getPast12MonthKeys()
+  let accumulated = 0
+
+  for (const key of monthKeys) {
+    const monthIncome = incomes
+      .filter((i) => getMonthKey(i.date) === key)
+      .reduce((s, i) => s + safeNum(i.amount), 0)
+    const monthExpense = expenses
+      .filter((e) => getMonthKey(e.dueDate) === key)
+      .reduce((s, e) => s + safeNum(e.amount), 0)
+    accumulated += monthIncome - monthExpense
+  }
+
+  return accumulated
+}
+
+function computeMonthStats(incomes, expenses) {
+  const monthKeys = getPast12MonthKeys()
+  let positive = 0
+  let negative = 0
+
+  for (const key of monthKeys) {
+    const monthIncome = incomes
+      .filter((i) => getMonthKey(i.date) === key)
+      .reduce((s, i) => s + safeNum(i.amount), 0)
+    const monthExpense = expenses
+      .filter((e) => getMonthKey(e.dueDate) === key)
+      .reduce((s, e) => s + safeNum(e.amount), 0)
+    const balance = monthIncome - monthExpense
+    if (balance > 0) positive++
+    else if (balance < 0) negative++
+  }
+
+  return { positive, negative }
+}
+
+function getPast12MonthKeys() {
+  const keys = []
+  const now = new Date()
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  return keys
+}
+
+function safeNum(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
 function createDashboardView({ cards, expenses, incomes, transactions }) {
   const currentMonth = getCurrentMonthKey()
   const monthlyIncomes = incomes.filter((income) => getMonthKey(income.date) === currentMonth)
   const monthlyExpenses = expenses.filter((expense) => getMonthKey(expense.dueDate) === currentMonth)
+  const accumulatedBalance = computeAccumulatedBalance(incomes, expenses)
+  const monthStats = computeMonthStats(incomes, expenses)
   const receivedIncomes = incomes.filter((income) => income.status === 'received')
   const pendingMonthlyIncomes = monthlyIncomes.filter((income) => income.status !== 'received')
   const unpaidMonthlyExpenses = monthlyExpenses.filter((expense) => expense.status !== 'paid')
@@ -275,11 +372,11 @@ function createDashboardView({ cards, expenses, incomes, transactions }) {
         tone: unpaidExpenseTotal > pendingIncomeTotal ? 'warning' : 'neutral',
       },
       {
-        label: 'Saldo previsto',
-        value: formatCurrency(forecastBalance),
-        detail: 'Projetado com pendências do mês',
-        trend: formatCurrency(netForecast),
-        tone: forecastBalance >= 0 ? 'neutral' : 'warning',
+        label: 'Saldo acumulado',
+        value: formatCurrency(accumulatedBalance),
+        detail: `${monthStats.positive} meses positivos · ${monthStats.negative} negativos`,
+        trend: accumulatedBalance >= 0 ? 'Em dia' : 'Atenção',
+        tone: accumulatedBalance >= 0 ? 'positive' : 'warning',
       },
     ],
   }

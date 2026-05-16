@@ -6,6 +6,7 @@ const navigationItems = [
   { label: 'Despesas', shortcut: 'DE' },
   { label: 'Transações', shortcut: 'TR' },
   { label: 'Cartões', shortcut: 'CA' },
+  { label: 'Fluxo Mensal', shortcut: 'FM' },
   { label: 'Relatórios', shortcut: 'RE', premium: true },
   { label: 'Premium', shortcut: 'PR' },
   { label: 'Configurações', shortcut: 'CO' },
@@ -16,7 +17,7 @@ const mobileNavigationItems = [
   { label: 'Receitas', shortcut: 'RC' },
   { label: 'Despesas', shortcut: 'DE' },
   { label: 'Cartões', shortcut: 'CA' },
-  { label: 'Premium', shortcut: 'PR' },
+  { label: 'Fluxo Mensal', shortcut: 'FM' },
 ]
 
 export function Sidebar({
@@ -40,9 +41,12 @@ export function Sidebar({
       <aside className={isOpen ? 'sidebar is-open' : 'sidebar'} aria-label="Navegação principal">
         <div className="sidebar-head">
           <div className="brand">
-            <div className="brand-mark" aria-hidden="true">
-              F
-            </div>
+            <img
+              alt=""
+              aria-hidden="true"
+              className="brand-logo-symbol"
+              src="/brand/fluxo-symbol.svg"
+            />
             <div>
               <strong>Fluxo</strong>
               <span>Finance OS</span>

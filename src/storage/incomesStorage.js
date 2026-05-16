@@ -93,6 +93,9 @@ function normalizeIncome(income) {
     note: income.note ?? '',
     receivedAt: income.receivedAt ?? '',
     generatedFrom: income.generatedFrom,
+    installmentGroupId: income.installmentGroupId ?? '',
+    installmentsTotal: Number(income.installmentsTotal) || 1,
+    installmentNumber: Number(income.installmentNumber) || 1,
   }
 }
 

@@ -49,6 +49,11 @@ function normalizeCard(card) {
     totalLimit: normalizeAmount(card.totalLimit),
     availableLimit: normalizeAmount(card.availableLimit),
     invoiceCycle: Number(card.invoiceCycle) || 0,
+    brand: card.brand ?? 'Outro',
+    closingDay: Number(card.closingDay) || 1,
+    dueDay: Number(card.dueDay) || 10,
+    color: card.color ?? card.variant ?? 'violet',
+    active: card.active !== false,
   }
 }
 

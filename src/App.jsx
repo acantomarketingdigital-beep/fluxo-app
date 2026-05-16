@@ -2,6 +2,7 @@ import './App.css'
 import { useState } from 'react'
 import { AuthLayout } from './components/AuthLayout'
 import { CardsScreen } from './components/CardsScreen'
+import { CashflowScreen } from './components/CashflowScreen'
 import { DashboardScreen } from './components/DashboardScreen'
 import { ExpenseScreen } from './components/ExpenseScreen'
 import { IncomeScreen } from './components/IncomeScreen'
@@ -21,6 +22,7 @@ const screens = {
   Despesas: ExpenseScreen,
   Transações: TransactionsScreen,
   Cartões: CardsScreen,
+  'Fluxo Mensal': CashflowScreen,
   Relatórios: ReportsScreen,
   Premium: PremiumScreen,
   Configurações: SettingsScreen,

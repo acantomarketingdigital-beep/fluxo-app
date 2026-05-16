@@ -14,20 +14,22 @@ import {
   resetExpensesData,
   saveExpensesState,
 } from '../storage/expensesStorage'
+import { loadCardsState } from '../storage/cardsStorage'
 import {
   hasTransactionForReference,
   recordTransaction,
 } from '../storage/transactionsStorage'
 import { useToast } from '../hooks/useToast'
 
+const TODAY = getTodayDate()
+
 const initialFormData = {
   type: 'single',
   description: '',
   amount: '',
   totalAmount: '',
-  installmentsTotal: '6',
-  installmentNumber: '1',
-  dueDate: '2026-05-15',
+  installmentsTotal: '3',
+  dueDate: TODAY,
   status: 'open',
   category: '',
   note: '',
@@ -35,30 +37,39 @@ const initialFormData = {
   alertEnabled: true,
   alertTiming: 'before_due',
   alertTime: '08:00',
+  paymentMethod: 'other',
+  cardId: '',
+  cardInstallments: '1',
 }
 
 export function ExpenseScreen() {
   const [expensesState, setExpensesState] = useState(loadExpensesState)
+  const [cards, setCards] = useState(() => loadCardsState().cards)
   const [formData, setFormData] = useState(initialFormData)
   const [statusMessage, setStatusMessage] = useState('')
+  const [editingExpense, setEditingExpense] = useState(null)
+  const [editFormData, setEditFormData] = useState(null)
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
   const { addToast } = useToast()
   const { expenses } = expensesState
-  const today = getTodayDate()
 
-  const typeLabels = useMemo(() => createLabelMap(expenseTypes), [])
-  const frequencyLabels = useMemo(() => createLabelMap(frequencyOptions), [])
-  const statusLabels = useMemo(() => createLabelMap(statusOptions), [])
+  useEffect(() => {
+    function handleDataPulled() {
+      setExpensesState(loadExpensesState())
+      setCards(loadCardsState().cards)
+    }
+    window.addEventListener('fluxo:data-pulled', handleDataPulled)
+    return () => window.removeEventListener('fluxo:data-pulled', handleDataPulled)
+  }, [])
 
   useEffect(() => {
     saveExpensesState(expensesState)
   }, [expensesState])
 
+  const today = useMemo(getTodayDate, [])
+
   const expensesWithStatus = useMemo(
-    () =>
-      expenses.map((expense) => ({
-        ...expense,
-        displayStatus: getExpenseDisplayStatus(expense, today),
-      })),
+    () => expenses.map((e) => ({ ...e, displayStatus: getExpenseDisplayStatus(e, today) })),
     [expenses, today],
   )
 
@@ -68,161 +79,293 @@ export function ExpenseScreen() {
   )
 
   const summary = useMemo(() => {
-    const unpaidExpenses = expensesWithStatus.filter(
-      (expense) => expense.displayStatus !== 'paid',
-    )
-    const totalOpen = unpaidExpenses.reduce((sum, expense) => sum + expense.amount, 0)
-    const overdue = expensesWithStatus.filter(
-      (expense) => expense.displayStatus === 'overdue',
-    ).length
-    const alerts = unpaidExpenses.filter((expense) => expense.alertEnabled).length
-    const nextDue = [...unpaidExpenses].sort((current, next) =>
-      current.dueDate.localeCompare(next.dueDate),
-    )[0]
+    const unpaid = expensesWithStatus.filter((e) => e.displayStatus !== 'paid')
+    const totalOpen = unpaid.reduce((s, e) => s + e.amount, 0)
+    const overdue = expensesWithStatus.filter((e) => e.displayStatus === 'overdue').length
+    const alerts = unpaid.filter((e) => e.alertEnabled).length
+    const nextDue = [...unpaid].sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
 
     return [
-      {
-        label: 'Total em aberto',
-        value: formatCurrency(totalOpen),
-        detail: `${unpaidExpenses.length} despesas pendentes`,
-      },
-      {
-        label: 'Atrasadas',
-        value: String(overdue),
-        detail: 'Destaque em vermelho',
-      },
-      {
-        label: 'Alertas ativos',
-        value: String(alerts),
-        detail: 'Lembretes configurados',
-      },
-      {
-        label: 'Próximo vencimento',
-        value: nextDue ? formatShortDate(nextDue.dueDate) : '-',
-        detail: nextDue?.description ?? 'Sem despesas abertas',
-      },
+      { label: 'Total em aberto', value: formatCurrency(totalOpen), detail: `${unpaid.length} despesas pendentes` },
+      { label: 'Atrasadas', value: String(overdue), detail: 'Destaque em vermelho' },
+      { label: 'Alertas ativos', value: String(alerts), detail: 'Lembretes configurados' },
+      { label: 'Próximo vencimento', value: nextDue ? formatShortDate(nextDue.dueDate) : '-', detail: nextDue?.description ?? 'Sem despesas abertas' },
     ]
   }, [expensesWithStatus])
 
   function handleChange(event) {
     const { checked, name, type, value } = event.target
-
     setStatusMessage('')
-    setFormData((current) => ({
-      ...current,
+    setFormData((cur) => ({
+      ...cur,
       [name]: type === 'checkbox' ? checked : value,
+      ...(name === 'paymentMethod' && value !== 'credit_card' ? { cardId: '', cardInstallments: '1' } : {}),
     }))
   }
 
   function handleTypeChange(type) {
     setStatusMessage('')
-    setFormData((current) => ({
-      ...current,
+    setFormData((cur) => ({
+      ...cur,
       type,
-      amount: type === 'installment' ? current.amount : current.amount || current.totalAmount,
-      totalAmount: type === 'installment' ? current.totalAmount || current.amount : '',
-      frequency: type === 'single' ? 'monthly' : current.frequency || 'monthly',
-      installmentsTotal: type === 'installment' ? current.installmentsTotal : '6',
-      installmentNumber: type === 'installment' ? current.installmentNumber : '1',
+      amount: type === 'installment' ? cur.amount : cur.amount || cur.totalAmount,
+      totalAmount: type === 'installment' ? cur.totalAmount || cur.amount : '',
+      frequency: type === 'single' ? 'monthly' : cur.frequency || 'monthly',
+      installmentsTotal: type === 'installment' ? cur.installmentsTotal : '3',
     }))
   }
 
   function handleSubmit(event) {
     event.preventDefault()
 
-    const newExpense = createExpenseFromForm(formData)
-
-    if (!newExpense) {
-      setStatusMessage('Preencha um valor maior que zero e confira os dados da despesa.')
+    if (formData.type === 'installment') {
+      handleSubmitInstallmentGroup()
       return
     }
 
-    const nextExpense = newExpense.status === 'paid' ? createNextExpense(newExpense) : null
+    const newExpense = createExpenseFromForm(formData)
+    if (!newExpense) {
+      setStatusMessage('Preencha um valor maior que zero e todos os campos obrigatórios.')
+      return
+    }
 
     if (newExpense.status === 'paid') {
       recordExpensePayment(newExpense)
     }
 
-    setExpensesState((currentState) => ({
+    const nextExpense = newExpense.status === 'paid' && newExpense.type === 'recurring'
+      ? createNextRecurring(newExpense)
+      : null
+
+    setExpensesState((cur) => ({
       expenses: nextExpense
-        ? [nextExpense, newExpense, ...currentState.expenses]
-        : [newExpense, ...currentState.expenses],
+        ? [nextExpense, newExpense, ...cur.expenses]
+        : [newExpense, ...cur.expenses],
     }))
-    setStatusMessage(
-      newExpense.status === 'paid'
-        ? 'Despesa cadastrada como paga e descontada do saldo em mãos.'
-        : 'Despesa cadastrada e salva automaticamente.',
-    )
+
+    setStatusMessage('Despesa cadastrada.')
+    addToast({ title: 'Despesa cadastrada', description: 'Salva com sucesso.', tone: 'success' })
+    setFormData({ ...initialFormData, dueDate: TODAY })
+  }
+
+  function handleSubmitInstallmentGroup() {
+    const totalAmount = parseBrazilianAmount(formData.totalAmount || formData.amount)
+    const installmentsTotal = Math.max(2, Number(formData.installmentsTotal) || 2)
+
+    if (totalAmount <= 0 || !formData.description.trim() || !formData.dueDate) {
+      setStatusMessage('Preencha valor, descrição e data.')
+      return
+    }
+
+    const cardObj = formData.paymentMethod === 'credit_card'
+      ? cards.find((c) => c.id === formData.cardId)
+      : null
+
+    const groupId = createGroupId()
+    const installmentAmount = totalAmount / installmentsTotal
+    const newExpenses = Array.from({ length: installmentsTotal }, (_, i) => ({
+      id: createExpenseId(),
+      type: 'installment',
+      description: formData.description.trim(),
+      amount: installmentAmount,
+      totalAmount,
+      installmentsTotal,
+      installmentNumber: i + 1,
+      dueDate: addMonths(formData.dueDate, i),
+      status: 'open',
+      category: formData.category.trim(),
+      note: formData.note.trim(),
+      frequency: formData.frequency,
+      alertEnabled: formData.alertEnabled,
+      alertTiming: formData.alertTiming,
+      alertTime: formData.alertTime,
+      paidAt: '',
+      paymentMethod: formData.paymentMethod,
+      cardId: cardObj?.id ?? '',
+      cardName: cardObj?.name ?? '',
+      installmentGroupId: groupId,
+    }))
+
+    setExpensesState((cur) => ({ expenses: [...newExpenses, ...cur.expenses] }))
+    setStatusMessage(`${installmentsTotal} parcelas criadas para "${formData.description.trim()}".`)
     addToast({
-      description:
-        newExpense.status === 'paid'
-          ? 'A saída foi registrada em transações.'
-          : 'Despesa salva com fallback local.',
-      title: 'Despesa cadastrada',
+      title: 'Parcelas criadas',
+      description: `${installmentsTotal}x de ${formatCurrency(installmentAmount)}`,
       tone: 'success',
     })
-    setFormData(initialFormData)
+    setFormData({ ...initialFormData, dueDate: TODAY })
   }
 
   function handleMarkPaid(expenseId) {
-    const selectedExpense = expenses.find((expense) => expense.id === expenseId)
-
-    if (!selectedExpense || getExpenseDisplayStatus(selectedExpense, today) === 'paid') {
-      return
-    }
+    const selectedExpense = expenses.find((e) => e.id === expenseId)
+    if (!selectedExpense || getExpenseDisplayStatus(selectedExpense, today) === 'paid') return
 
     const paymentDate = getTodayDate()
 
-    setExpensesState((currentState) => {
-      const targetExpense = currentState.expenses.find((expense) => expense.id === expenseId)
+    setExpensesState((cur) => {
+      const target = cur.expenses.find((e) => e.id === expenseId)
+      if (!target || getExpenseDisplayStatus(target, today) === 'paid') return cur
 
-      if (!targetExpense || getExpenseDisplayStatus(targetExpense, today) === 'paid') {
-        return currentState
-      }
+      recordExpensePayment(target, paymentDate)
 
-      recordExpensePayment(targetExpense, paymentDate)
-
-      const paidExpenses = currentState.expenses.map((expense) =>
-        expense.id === expenseId
-          ? {
-              ...expense,
-              status: 'paid',
-              paidAt: paymentDate,
-            }
-          : expense,
+      const updated = cur.expenses.map((e) =>
+        e.id === expenseId ? { ...e, status: 'paid', paidAt: paymentDate } : e,
       )
-      const nextExpense = createNextExpense(targetExpense)
 
-      return {
-        expenses: nextExpense ? [nextExpense, ...paidExpenses] : paidExpenses,
+      if (target.type === 'recurring' && !target.installmentGroupId) {
+        const next = createNextRecurring(target)
+        return { expenses: next ? [next, ...updated] : updated }
       }
+
+      return { expenses: updated }
     })
 
-    setStatusMessage(createPaidMessage(selectedExpense))
-    addToast({
-      description: 'A saída foi registrada em transações.',
-      title: 'Despesa paga',
-      tone: 'success',
+    addToast({ title: 'Despesa paga', description: 'Registrado em transações.', tone: 'success' })
+  }
+
+  function handleEdit(expense) {
+    setEditingExpense(expense)
+    setEditFormData({
+      type: expense.type ?? 'single',
+      description: expense.description ?? '',
+      amount: String(expense.amount ?? ''),
+      totalAmount: String(expense.totalAmount ?? expense.amount ?? ''),
+      installmentsTotal: String(expense.installmentsTotal ?? 1),
+      dueDate: expense.dueDate ?? TODAY,
+      status: expense.status ?? 'open',
+      category: expense.category ?? '',
+      note: expense.note ?? '',
+      frequency: expense.frequency ?? 'monthly',
+      alertEnabled: expense.alertEnabled ?? true,
+      alertTiming: expense.alertTiming ?? 'before_due',
+      alertTime: expense.alertTime ?? '08:00',
+      paymentMethod: expense.paymentMethod ?? 'other',
+      cardId: expense.cardId ?? '',
+      cardInstallments: '1',
     })
   }
 
-  function handleResetExpenses() {
-    const confirmed = window.confirm(
-      'Apagar todas as despesas salvas neste navegador?',
+  function handleEditChange(event) {
+    const { checked, name, type, value } = event.target
+    setEditFormData((cur) => ({
+      ...cur,
+      [name]: type === 'checkbox' ? checked : value,
+      ...(name === 'paymentMethod' && value !== 'credit_card' ? { cardId: '' } : {}),
+    }))
+  }
+
+  function handleEditTypeChange(type) {
+    setEditFormData((cur) => ({
+      ...cur,
+      type,
+      amount: type === 'installment' ? cur.amount : cur.amount || cur.totalAmount,
+      totalAmount: type === 'installment' ? cur.totalAmount || cur.amount : '',
+      frequency: type === 'single' ? 'monthly' : cur.frequency || 'monthly',
+    }))
+  }
+
+  function handleSaveEdit(event) {
+    event.preventDefault()
+
+    const parsedAmount = parseBrazilianAmount(
+      editFormData.type === 'installment' ? editFormData.totalAmount : editFormData.amount,
     )
 
-    if (!confirmed) {
+    if (parsedAmount <= 0 || !editFormData.description.trim()) {
       return
     }
 
+    const cardObj = editFormData.paymentMethod === 'credit_card'
+      ? cards.find((c) => c.id === editFormData.cardId)
+      : null
+
+    const hasGroup = !!editingExpense.installmentGroupId && editingExpense.installmentsTotal > 1
+
+    if (hasGroup) {
+      const groupId = editingExpense.installmentGroupId
+      const groupExpenses = expenses.filter((e) => e.installmentGroupId === groupId)
+      const perInstallment = parsedAmount / groupExpenses.length
+
+      setExpensesState((cur) => ({
+        expenses: cur.expenses.map((e) => {
+          if (e.installmentGroupId !== groupId) return e
+          return {
+            ...e,
+            description: editFormData.description.trim(),
+            amount: perInstallment,
+            totalAmount: parsedAmount,
+            category: editFormData.category.trim(),
+            note: editFormData.note.trim(),
+            paymentMethod: editFormData.paymentMethod,
+            cardId: cardObj?.id ?? '',
+            cardName: cardObj?.name ?? '',
+          }
+        }),
+      }))
+      addToast({ title: 'Parcelas atualizadas', description: `${groupExpenses.length} parcelas editadas.`, tone: 'success' })
+    } else {
+      setExpensesState((cur) => ({
+        expenses: cur.expenses.map((e) => {
+          if (e.id !== editingExpense.id) return e
+          return {
+            ...e,
+            type: editFormData.type,
+            description: editFormData.description.trim(),
+            amount: parsedAmount,
+            totalAmount: editFormData.type === 'installment' ? parsedAmount : 0,
+            dueDate: editFormData.dueDate,
+            status: editFormData.status,
+            category: editFormData.category.trim(),
+            note: editFormData.note.trim(),
+            frequency: editFormData.frequency,
+            alertEnabled: editFormData.alertEnabled,
+            alertTiming: editFormData.alertTiming,
+            alertTime: editFormData.alertTime,
+            paymentMethod: editFormData.paymentMethod,
+            cardId: cardObj?.id ?? '',
+            cardName: cardObj?.name ?? '',
+          }
+        }),
+      }))
+      addToast({ title: 'Despesa atualizada', description: 'Alterações salvas.', tone: 'success' })
+    }
+
+    setEditingExpense(null)
+    setEditFormData(null)
+  }
+
+  function handleDelete(expense) {
+    const groupSize = expense.installmentGroupId
+      ? expenses.filter((e) => e.installmentGroupId === expense.installmentGroupId).length
+      : 0
+    setDeleteConfirm({ expense, groupSize })
+  }
+
+  function handleConfirmDelete(mode) {
+    if (!deleteConfirm) return
+    const { expense } = deleteConfirm
+
+    if (mode === 'group' && expense.installmentGroupId) {
+      const groupId = expense.installmentGroupId
+      setExpensesState((cur) => ({
+        expenses: cur.expenses.filter((e) => e.installmentGroupId !== groupId),
+      }))
+      addToast({ title: 'Parcelas excluídas', description: 'Todo o grupo foi removido.', tone: 'success' })
+    } else {
+      setExpensesState((cur) => ({
+        expenses: cur.expenses.filter((e) => e.id !== expense.id),
+      }))
+      addToast({ title: 'Despesa excluída', tone: 'success', description: '' })
+    }
+
+    setDeleteConfirm(null)
+  }
+
+  function handleResetExpenses() {
+    if (!window.confirm('Apagar todas as despesas salvas neste navegador?')) return
     setExpensesState(resetExpensesData())
-    setFormData(initialFormData)
+    setFormData({ ...initialFormData, dueDate: TODAY })
     setStatusMessage('Despesas apagadas.')
-    addToast({
-      description: 'Todas as despesas foram removidas.',
-      title: 'Despesas zeradas',
-      tone: 'success',
-    })
   }
 
   function focusExpenseForm() {
@@ -247,6 +390,7 @@ export function ExpenseScreen() {
       <section className="expenses-grid" aria-label="Gestão de despesas">
         <ExpenseForm
           alertTimingOptions={alertTimingOptions}
+          cards={cards}
           expenseTypes={expenseTypes}
           formData={formData}
           frequencyOptions={frequencyOptions}
@@ -257,41 +401,187 @@ export function ExpenseScreen() {
           statusOptions={statusOptions}
         />
         <ExpenseList
-          alertTimingOptions={alertTimingOptions}
           expenses={sortedExpenses}
-          frequencyLabels={frequencyLabels}
+          onDelete={handleDelete}
+          onEdit={handleEdit}
           onMarkPaid={handleMarkPaid}
-          statusLabels={statusLabels}
-          typeLabels={typeLabels}
         />
       </section>
+
+      {editingExpense && editFormData ? (
+        <div className="modal-overlay" onClick={() => { setEditingExpense(null); setEditFormData(null) }}>
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>
+                Editar despesa
+                {editingExpense.installmentGroupId && editingExpense.installmentsTotal > 1
+                  ? ` — todas as ${expenses.filter((e) => e.installmentGroupId === editingExpense.installmentGroupId).length} parcelas`
+                  : ''}
+              </h2>
+              <button className="modal-close" onClick={() => { setEditingExpense(null); setEditFormData(null) }} type="button">×</button>
+            </div>
+            <div className="modal-body">
+              <form className="expense-form" onSubmit={handleSaveEdit}>
+                <label className="form-field form-field-wide">
+                  <span>Descrição</span>
+                  <input
+                    name="description"
+                    onChange={handleEditChange}
+                    required
+                    type="text"
+                    value={editFormData.description}
+                  />
+                </label>
+
+                <div className="form-grid">
+                  <label className="form-field">
+                    <span>{editingExpense.installmentGroupId ? 'Valor total' : 'Valor'}</span>
+                    <input
+                      inputMode="decimal"
+                      name={editingExpense.installmentGroupId ? 'totalAmount' : 'amount'}
+                      onChange={handleEditChange}
+                      required
+                      type="text"
+                      value={editingExpense.installmentGroupId ? editFormData.totalAmount : editFormData.amount}
+                    />
+                  </label>
+
+                  {!editingExpense.installmentGroupId ? (
+                    <label className="form-field">
+                      <span>Vencimento</span>
+                      <input name="dueDate" onChange={handleEditChange} type="date" value={editFormData.dueDate} />
+                    </label>
+                  ) : null}
+                </div>
+
+                <div className="form-grid">
+                  {!editingExpense.installmentGroupId ? (
+                    <label className="form-field">
+                      <span>Status</span>
+                      <select name="status" onChange={handleEditChange} value={editFormData.status}>
+                        {statusOptions.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+
+                  <label className="form-field">
+                    <span>Categoria</span>
+                    <input name="category" onChange={handleEditChange} type="text" value={editFormData.category} />
+                  </label>
+                </div>
+
+                <div className="form-field form-field-wide">
+                  <span>Forma de pagamento</span>
+                  <div className="payment-method-grid">
+                    {PAYMENT_METHODS.map((pm) => (
+                      <button
+                        className={editFormData.paymentMethod === pm.value ? 'payment-method-btn is-selected' : 'payment-method-btn'}
+                        key={pm.value}
+                        onClick={() => handleEditChange({ target: { name: 'paymentMethod', value: pm.value, type: 'select' } })}
+                        type="button"
+                      >
+                        <span>{pm.icon}</span>
+                        <small>{pm.label}</small>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {editFormData.paymentMethod === 'credit_card' && cards.length > 0 ? (
+                  <div className="card-selector-field">
+                    <label className="form-field">
+                      <span>Cartão</span>
+                      <select name="cardId" onChange={handleEditChange} value={editFormData.cardId}>
+                        <option value="">Selecionar cartão</option>
+                        {cards.filter((c) => c.active !== false).map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                ) : null}
+
+                <label className="form-field form-field-wide">
+                  <span>Observação</span>
+                  <textarea name="note" onChange={handleEditChange} value={editFormData.note} />
+                </label>
+
+                <div className="modal-actions">
+                  <button className="ghost-action" onClick={() => { setEditingExpense(null); setEditFormData(null) }} type="button">
+                    Cancelar
+                  </button>
+                  <button className="primary-action" type="submit">Salvar alterações</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteConfirm ? (
+        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal-dialog modal-confirm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Excluir despesa</h2>
+              <button className="modal-close" onClick={() => setDeleteConfirm(null)} type="button">×</button>
+            </div>
+            <div className="modal-body">
+              <strong>{deleteConfirm.expense.description}</strong>
+              <p>
+                {deleteConfirm.groupSize > 1
+                  ? `Esta é a parcela ${deleteConfirm.expense.installmentNumber}/${deleteConfirm.expense.installmentsTotal}. Deseja excluir apenas esta parcela ou todo o grupo (${deleteConfirm.groupSize} parcelas)?`
+                  : 'Confirma a exclusão desta despesa? Esta ação não pode ser desfeita.'}
+              </p>
+              <div className="confirm-actions">
+                {deleteConfirm.groupSize > 1 ? (
+                  <>
+                    <button className="confirm-action-danger" onClick={() => handleConfirmDelete('group')} type="button">
+                      Excluir todas as {deleteConfirm.groupSize} parcelas
+                    </button>
+                    <button className="confirm-action-secondary" onClick={() => handleConfirmDelete('single')} type="button">
+                      Excluir só esta parcela ({deleteConfirm.expense.installmentNumber}/{deleteConfirm.expense.installmentsTotal})
+                    </button>
+                  </>
+                ) : (
+                  <button className="confirm-action-danger" onClick={() => handleConfirmDelete('single')} type="button">
+                    Confirmar exclusão
+                  </button>
+                )}
+                <button className="confirm-action-cancel" onClick={() => setDeleteConfirm(null)} type="button">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   )
 }
 
-function createLabelMap(items) {
-  return items.reduce((labels, item) => ({ ...labels, [item.id ?? item.value]: item.label }), {})
-}
+const PAYMENT_METHODS = [
+  { value: 'cash', icon: '💵', label: 'Dinheiro' },
+  { value: 'pix', icon: '⚡', label: 'Pix' },
+  { value: 'debit', icon: '💳', label: 'Débito' },
+  { value: 'credit_card', icon: '🪙', label: 'Crédito' },
+  { value: 'bill', icon: '🧾', label: 'Boleto' },
+  { value: 'other', icon: '·', label: 'Outro' },
+]
 
 function createExpenseFromForm(formData) {
-  const isInstallment = formData.type === 'installment'
-  const parsedAmount = parseBrazilianAmount(isInstallment ? formData.totalAmount : formData.amount)
+  const parsedAmount = parseBrazilianAmount(formData.amount)
+  if (parsedAmount <= 0 || !formData.description.trim() || !formData.dueDate) return null
 
-  if (parsedAmount <= 0 || !formData.description.trim() || !formData.dueDate) {
-    return null
-  }
-
-  const installmentsTotal = Math.max(1, Number(formData.installmentsTotal) || 1)
-  const installmentNumber = Math.min(
-    Math.max(1, Number(formData.installmentNumber) || 1),
-    installmentsTotal,
-  )
-  const installmentAmount = parsedAmount / installmentsTotal
-  const baseExpense = {
+  return {
     id: createExpenseId(),
     type: formData.type,
     description: formData.description.trim(),
-    amount: isInstallment ? installmentAmount : parsedAmount,
+    amount: parsedAmount,
+    totalAmount: 0,
+    installmentsTotal: 1,
+    installmentNumber: 1,
     dueDate: formData.dueDate,
     status: formData.status,
     category: formData.category.trim(),
@@ -301,31 +591,26 @@ function createExpenseFromForm(formData) {
     alertTiming: formData.alertTiming,
     alertTime: formData.alertTime,
     paidAt: formData.status === 'paid' ? getTodayDate() : '',
+    paymentMethod: formData.paymentMethod,
+    cardId: formData.paymentMethod === 'credit_card' ? formData.cardId : '',
+    cardName: '',
+    installmentGroupId: '',
   }
+}
 
-  if (!isInstallment) {
-    return baseExpense
-  }
-
+function createNextRecurring(expense) {
   return {
-    ...baseExpense,
-    totalAmount: parsedAmount,
-    installmentsTotal,
-    installmentNumber,
+    ...expense,
+    id: createExpenseId(),
+    dueDate: addFutureFrequency(expense.dueDate, expense.frequency),
+    status: 'open',
+    paidAt: '',
+    generatedFrom: expense.id,
   }
 }
 
 function recordExpensePayment(expense, paymentDate = getTodayDate()) {
-  if (
-    hasTransactionForReference({
-      origin: 'despesa',
-      referenceId: expense.id,
-      type: 'saida',
-    })
-  ) {
-    return
-  }
-
+  if (hasTransactionForReference({ origin: 'despesa', referenceId: expense.id, type: 'saida' })) return
   recordTransaction({
     type: 'saida',
     description: expense.description,
@@ -336,127 +621,59 @@ function recordExpensePayment(expense, paymentDate = getTodayDate()) {
   })
 }
 
-function createNextExpense(expense) {
-  if (expense.type === 'recurring') {
-    return {
-      ...expense,
-      id: createExpenseId(),
-      dueDate: addFutureFrequency(expense.dueDate, expense.frequency),
-      status: 'open',
-      paidAt: '',
-      generatedFrom: expense.id,
-    }
-  }
-
-  if (expense.type !== 'installment') {
-    return null
-  }
-
-  const installmentNumber = Number(expense.installmentNumber) || 1
-  const installmentsTotal = Number(expense.installmentsTotal) || 1
-
-  if (installmentNumber >= installmentsTotal) {
-    return null
-  }
-
-  return {
-    ...expense,
-    id: createExpenseId(),
-    dueDate: addFrequency(expense.dueDate, expense.frequency),
-    status: 'open',
-    installmentNumber: installmentNumber + 1,
-    paidAt: '',
-    generatedFrom: expense.id,
-  }
-}
-
-function createPaidMessage(expense) {
-  if (expense.type === 'recurring') {
-    return 'Despesa recorrente paga. A próxima foi criada automaticamente.'
-  }
-
-  if (expense.type === 'installment') {
-    const installmentNumber = Number(expense.installmentNumber) || 1
-    const installmentsTotal = Number(expense.installmentsTotal) || 1
-
-    return installmentNumber < installmentsTotal
-      ? 'Parcela paga. A próxima parcela foi liberada.'
-      : 'Última parcela marcada como paga.'
-  }
-
-  return 'Despesa marcada como paga.'
-}
-
-function sortExpensesByPriority(current, next) {
-  const currentGroup = current.displayStatus === 'paid' ? 1 : 0
-  const nextGroup = next.displayStatus === 'paid' ? 1 : 0
-
-  if (currentGroup !== nextGroup) {
-    return currentGroup - nextGroup
-  }
-
-  const dueDateComparison = current.dueDate.localeCompare(next.dueDate)
-
-  if (dueDateComparison !== 0) {
-    return dueDateComparison
-  }
-
-  return current.description.localeCompare(next.description)
+function sortExpensesByPriority(a, b) {
+  const ag = a.displayStatus === 'paid' ? 1 : 0
+  const bg = b.displayStatus === 'paid' ? 1 : 0
+  if (ag !== bg) return ag - bg
+  const d = a.dueDate.localeCompare(b.dueDate)
+  return d !== 0 ? d : a.description.localeCompare(b.description)
 }
 
 function getExpenseDisplayStatus(expense, today) {
-  if (expense.status === 'paid') {
-    return 'paid'
-  }
-
-  if (expense.status === 'overdue' || expense.dueDate < today) {
-    return 'overdue'
-  }
-
+  if (expense.status === 'paid') return 'paid'
+  if (expense.status === 'overdue' || expense.dueDate < today) return 'overdue'
   return 'open'
 }
 
+function addMonths(dateStr, months) {
+  const d = new Date(`${dateStr}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return dateStr
+  d.setMonth(d.getMonth() + months)
+  return formatInputDate(d)
+}
+
 function addFrequency(date, frequency) {
-  const nextDate = new Date(`${date}T12:00:00`)
-
-  if (Number.isNaN(nextDate.getTime())) {
-    return initialFormData.dueDate
-  }
-
-  if (frequency === 'daily') {
-    nextDate.setDate(nextDate.getDate() + 1)
-  } else if (frequency === 'weekly') {
-    nextDate.setDate(nextDate.getDate() + 7)
-  } else if (frequency === 'biweekly') {
-    nextDate.setDate(nextDate.getDate() + 15)
-  } else if (frequency === 'yearly') {
-    nextDate.setFullYear(nextDate.getFullYear() + 1)
-  } else {
-    nextDate.setMonth(nextDate.getMonth() + 1)
-  }
-
-  return formatInputDate(nextDate)
+  const d = new Date(`${date}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return date
+  if (frequency === 'daily') d.setDate(d.getDate() + 1)
+  else if (frequency === 'weekly') d.setDate(d.getDate() + 7)
+  else if (frequency === 'biweekly') d.setDate(d.getDate() + 15)
+  else if (frequency === 'yearly') d.setFullYear(d.getFullYear() + 1)
+  else d.setMonth(d.getMonth() + 1)
+  return formatInputDate(d)
 }
 
 function addFutureFrequency(date, frequency) {
-  let nextDate = addFrequency(date, frequency)
+  let next = addFrequency(date, frequency)
   let attempts = 0
-
-  while (nextDate <= getTodayDate() && attempts < 60) {
-    nextDate = addFrequency(nextDate, frequency)
+  while (next <= getTodayDate() && attempts < 60) {
+    next = addFrequency(next, frequency)
     attempts += 1
   }
-
-  return nextDate
+  return next
 }
 
 function parseBrazilianAmount(value) {
-  const numericValue = Number(String(value).replace(/\./g, '').replace(',', '.'))
-  return Number.isFinite(numericValue) ? numericValue : 0
+  const n = Number(String(value ?? '').replace(/\./g, '').replace(',', '.'))
+  return Number.isFinite(n) ? n : 0
 }
 
 function createExpenseId() {
   return `expense-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function createGroupId() {
+  return `grp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 function getTodayDate() {
@@ -464,23 +681,20 @@ function getTodayDate() {
 }
 
 function formatInputDate(date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 function formatCurrency(value) {
-  return value.toLocaleString('pt-BR', {
-    currency: 'BRL',
-    style: 'currency',
-  })
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 'R$ 0,00'
+  return n.toLocaleString('pt-BR', { currency: 'BRL', style: 'currency' })
 }
 
 function formatShortDate(date) {
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: 'short',
-  }).format(new Date(`${date}T12:00:00`))
+  if (!date) return '-'
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' })
+    .format(new Date(`${date}T12:00:00`))
 }
