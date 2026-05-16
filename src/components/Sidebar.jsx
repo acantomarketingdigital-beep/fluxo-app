@@ -45,7 +45,7 @@ export function Sidebar({
               alt=""
               aria-hidden="true"
               className="brand-logo-symbol"
-              src="/brand/fluxo-symbol.svg"
+              src="/brand/app-icon-192.png"
             />
             <div>
               <strong>Fluxo</strong>

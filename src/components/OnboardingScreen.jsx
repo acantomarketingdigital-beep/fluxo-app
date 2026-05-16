@@ -59,7 +59,7 @@ export function OnboardingScreen() {
           <img
             alt="Fluxo"
             className="brand-logo-symbol"
-            src="/brand/fluxo-symbol.svg"
+            src="/brand/app-icon-192.png"
           />
           <div>
             <strong>Fluxo</strong>
