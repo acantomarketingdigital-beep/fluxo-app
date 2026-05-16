@@ -262,7 +262,7 @@ export function ExpenseScreen() {
         e.id === expenseId ? { ...e, status: 'paid', paidAt: paymentDate } : e,
       )
 
-      if (target.type === 'recurring' && !target.installmentGroupId) {
+      if (target.type === 'recurring' && !target.installmentGroupId && !target.recurringGroupId) {
         const next = createNextRecurring(target)
         return { expenses: next ? [next, ...updated] : updated }
       }
@@ -599,17 +599,23 @@ export function ExpenseScreen() {
               <strong>{deleteConfirm.expense.description}</strong>
               <p>
                 {deleteConfirm.groupSize > 1
-                  ? `Esta é a parcela ${deleteConfirm.expense.installmentNumber}/${deleteConfirm.expense.installmentsTotal}. Deseja excluir apenas esta parcela ou todo o grupo (${deleteConfirm.groupSize} parcelas)?`
+                  ? deleteConfirm.expense.recurringGroupId
+                    ? `Este lançamento faz parte de um grupo recorrente (${deleteConfirm.groupSize} lançamentos). Excluir apenas este ou todos?`
+                    : `Esta é a parcela ${deleteConfirm.expense.installmentNumber}/${deleteConfirm.expense.installmentsTotal}. Deseja excluir apenas esta parcela ou todo o grupo (${deleteConfirm.groupSize} parcelas)?`
                   : 'Confirma a exclusão desta despesa? Esta ação não pode ser desfeita.'}
               </p>
               <div className="confirm-actions">
                 {deleteConfirm.groupSize > 1 ? (
                   <>
                     <button className="confirm-action-danger" onClick={() => handleConfirmDelete('group')} type="button">
-                      Excluir todas as {deleteConfirm.groupSize} parcelas
+                      {deleteConfirm.expense.recurringGroupId
+                        ? `Excluir todos os ${deleteConfirm.groupSize} lançamentos`
+                        : `Excluir todas as ${deleteConfirm.groupSize} parcelas`}
                     </button>
                     <button className="confirm-action-secondary" onClick={() => handleConfirmDelete('single')} type="button">
-                      Excluir só esta parcela ({deleteConfirm.expense.installmentNumber}/{deleteConfirm.expense.installmentsTotal})
+                      {deleteConfirm.expense.recurringGroupId
+                        ? 'Excluir só este lançamento'
+                        : `Excluir só esta parcela (${deleteConfirm.expense.installmentNumber}/${deleteConfirm.expense.installmentsTotal})`}
                     </button>
                   </>
                 ) : (
