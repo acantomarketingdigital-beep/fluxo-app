@@ -105,11 +105,11 @@ export function CashflowScreen() {
                 {months.map((row) => {
                   const isCurrentMonth = row.key === currentMonthKey
                   return (
-                    <tr className={isCurrentMonth ? 'cashflow-current-row' : ''} key={row.key}>
+                    <tr className={isCurrentMonth ? 'cashflow-current-row' : row.projected ? 'cashflow-projected-row' : ''} key={row.key}>
                       <td>
                         <div className="cashflow-month-label">
                           {row.label}
-                          {isCurrentMonth ? <small>mês atual</small> : null}
+                          {isCurrentMonth ? <small>mês atual</small> : row.projected ? <small style={{color:'var(--muted)',fontStyle:'italic'}}>projetado</small> : null}
                         </div>
                       </td>
                       <td className="cashflow-positive">{formatCurrency(row.income)}</td>
@@ -165,17 +165,62 @@ function loadRawData() {
 
 function buildCashflow({ incomes, expenses }, period) {
   const monthKeys = getFutureMonthKeys(period)
+  const currentKey = getCurrentMonthKey()
+
+  // Build recurring income projections: group by description+source, use last known amount
+  const recurringIncomeMap = {}
+  for (const inc of incomes) {
+    if (!inc.recurring) continue
+    const k = `${inc.description}|${inc.source}`
+    if (!recurringIncomeMap[k] || inc.date > (recurringIncomeMap[k].date ?? '')) {
+      recurringIncomeMap[k] = { amount: safeNum(inc.amount), date: inc.date }
+    }
+  }
+
+  // Build recurring expense projections: group by description+category, use last known amount
+  const recurringExpenseMap = {}
+  for (const exp of expenses) {
+    if (exp.type !== 'recurring') continue
+    const k = `${exp.description}|${exp.category}`
+    if (!recurringExpenseMap[k] || exp.dueDate > (recurringExpenseMap[k].dueDate ?? '')) {
+      recurringExpenseMap[k] = { amount: safeNum(exp.amount), dueDate: exp.dueDate }
+    }
+  }
 
   let accumulated = 0
 
   const months = monthKeys.map((key) => {
-    const income = incomes
+    const isFuture = key > currentKey
+
+    let income = incomes
       .filter((i) => getMonthKey(i.date) === key)
       .reduce((s, i) => s + safeNum(i.amount), 0)
 
-    const expense = expenses
+    // Project recurring incomes into future months with no record
+    if (isFuture) {
+      for (const [groupKey, proj] of Object.entries(recurringIncomeMap)) {
+        const [desc, src] = groupKey.split('|')
+        const hasRecord = incomes.some(
+          (i) => getMonthKey(i.date) === key && i.description === desc && i.source === src && i.recurring
+        )
+        if (!hasRecord) income += proj.amount
+      }
+    }
+
+    let expense = expenses
       .filter((e) => getMonthKey(e.dueDate) === key)
       .reduce((s, e) => s + safeNum(e.amount), 0)
+
+    // Project recurring expenses into future months with no record
+    if (isFuture) {
+      for (const [groupKey, proj] of Object.entries(recurringExpenseMap)) {
+        const [desc, cat] = groupKey.split('|')
+        const hasRecord = expenses.some(
+          (e) => getMonthKey(e.dueDate) === key && e.description === desc && e.category === cat && e.type === 'recurring'
+        )
+        if (!hasRecord) expense += proj.amount
+      }
+    }
 
     const balance = income - expense
     accumulated += balance
@@ -187,6 +232,7 @@ function buildCashflow({ incomes, expenses }, period) {
       expense,
       balance,
       accumulated,
+      projected: isFuture,
     }
   })
 

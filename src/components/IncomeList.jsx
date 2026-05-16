@@ -123,6 +123,8 @@ function formatCurrency(value) {
 
 function formatDate(date) {
   if (!date) return '-'
-  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' })
-    .format(new Date(`${date}T12:00:00`))
+  const d = new Date(`${date}T12:00:00`)
+  const opts = { day: '2-digit', month: 'short' }
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric'
+  return new Intl.DateTimeFormat('pt-BR', opts).format(d)
 }

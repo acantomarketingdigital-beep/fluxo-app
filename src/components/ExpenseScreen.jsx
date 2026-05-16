@@ -631,9 +631,10 @@ function recordExpensePayment(expense, paymentDate = getTodayDate()) {
 }
 
 function sortExpensesByPriority(a, b) {
-  const ag = a.displayStatus === 'paid' ? 1 : 0
-  const bg = b.displayStatus === 'paid' ? 1 : 0
-  if (ag !== bg) return ag - bg
+  const rank = (s) => s === 'paid' ? 2 : s === 'overdue' ? 1 : 0
+  const ra = rank(a.displayStatus)
+  const rb = rank(b.displayStatus)
+  if (ra !== rb) return ra - rb
   const d = a.dueDate.localeCompare(b.dueDate)
   return d !== 0 ? d : a.description.localeCompare(b.description)
 }
