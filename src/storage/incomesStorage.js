@@ -96,6 +96,7 @@ function normalizeIncome(income) {
     installmentGroupId: income.installmentGroupId ?? '',
     installmentsTotal: Number(income.installmentsTotal) || 1,
     installmentNumber: Number(income.installmentNumber) || 1,
+    recurringGroupId: income.recurringGroupId ?? '',
   }
 }
 

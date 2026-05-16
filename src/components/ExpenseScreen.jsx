@@ -123,6 +123,11 @@ export function ExpenseScreen() {
       return
     }
 
+    if (formData.type === 'recurring') {
+      handleSubmitRecurringGroup()
+      return
+    }
+
     const newExpense = createExpenseFromForm(formData)
     if (!newExpense) {
       setStatusMessage('Preencha um valor maior que zero e todos os campos obrigatórios.')
@@ -133,18 +138,63 @@ export function ExpenseScreen() {
       recordExpensePayment(newExpense)
     }
 
-    const nextExpense = newExpense.status === 'paid' && newExpense.type === 'recurring'
-      ? createNextRecurring(newExpense)
-      : null
-
-    setExpensesState((cur) => ({
-      expenses: nextExpense
-        ? [nextExpense, newExpense, ...cur.expenses]
-        : [newExpense, ...cur.expenses],
-    }))
-
+    setExpensesState((cur) => ({ expenses: [newExpense, ...cur.expenses] }))
     setStatusMessage('Despesa cadastrada.')
     addToast({ title: 'Despesa cadastrada', description: 'Salva com sucesso.', tone: 'success' })
+    setFormData({ ...initialFormData, dueDate: TODAY })
+  }
+
+  function handleSubmitRecurringGroup() {
+    const amount = parseBrazilianAmount(formData.amount)
+    if (amount <= 0 || !formData.description.trim() || !formData.dueDate) {
+      setStatusMessage('Preencha valor, descrição e data.')
+      return
+    }
+
+    const cardObj = formData.paymentMethod === 'credit_card'
+      ? cards.find((c) => c.id === formData.cardId)
+      : null
+
+    const groupId = createGroupId()
+    const startDate = formData.dueDate
+    const endDate = addMonths(startDate, 12)
+    const records = []
+    let currentDate = startDate
+
+    while (currentDate <= endDate) {
+      records.push({
+        id: createExpenseId(),
+        type: 'recurring',
+        description: formData.description.trim(),
+        amount,
+        totalAmount: 0,
+        installmentsTotal: 1,
+        installmentNumber: 1,
+        dueDate: currentDate,
+        status: 'open',
+        category: formData.category.trim(),
+        note: formData.note.trim(),
+        frequency: formData.frequency,
+        alertEnabled: formData.alertEnabled,
+        alertTiming: formData.alertTiming,
+        alertTime: formData.alertTime,
+        paidAt: '',
+        paymentMethod: formData.paymentMethod,
+        cardId: cardObj?.id ?? '',
+        cardName: cardObj?.name ?? '',
+        installmentGroupId: '',
+        recurringGroupId: groupId,
+      })
+      currentDate = addFrequency(currentDate, formData.frequency)
+    }
+
+    setExpensesState((cur) => ({ expenses: [...records, ...cur.expenses] }))
+    setStatusMessage(`${records.length} lançamentos recorrentes criados.`)
+    addToast({
+      title: 'Recorrência criada',
+      description: `${records.length} lançamentos de ${formatCurrency(amount)}`,
+      tone: 'success',
+    })
     setFormData({ ...initialFormData, dueDate: TODAY })
   }
 
@@ -335,10 +385,13 @@ export function ExpenseScreen() {
   }
 
   function handleDelete(expense) {
-    const groupSize = expense.installmentGroupId
+    const installGroupSize = expense.installmentGroupId
       ? expenses.filter((e) => e.installmentGroupId === expense.installmentGroupId).length
       : 0
-    setDeleteConfirm({ expense, groupSize })
+    const recurGroupSize = expense.recurringGroupId
+      ? expenses.filter((e) => e.recurringGroupId === expense.recurringGroupId).length
+      : 0
+    setDeleteConfirm({ expense, groupSize: installGroupSize || recurGroupSize })
   }
 
   function handleConfirmDelete(mode) {
@@ -351,6 +404,12 @@ export function ExpenseScreen() {
         expenses: cur.expenses.filter((e) => e.installmentGroupId !== groupId),
       }))
       addToast({ title: 'Parcelas excluídas', description: 'Todo o grupo foi removido.', tone: 'success' })
+    } else if (mode === 'group' && expense.recurringGroupId) {
+      const groupId = expense.recurringGroupId
+      setExpensesState((cur) => ({
+        expenses: cur.expenses.filter((e) => e.recurringGroupId !== groupId),
+      }))
+      addToast({ title: 'Recorrência excluída', description: 'Todos os lançamentos foram removidos.', tone: 'success' })
     } else {
       setExpensesState((cur) => ({
         expenses: cur.expenses.filter((e) => e.id !== expense.id),

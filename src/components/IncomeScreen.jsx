@@ -109,27 +109,68 @@ export function IncomeScreen() {
       return
     }
 
+    if (formData.recurring) {
+      handleSubmitRecurringGroup()
+      return
+    }
+
     const income = createIncomeFromForm(formData)
     if (!income) {
       setStatusMessage('Preencha valor, descrição, origem e data.')
       return
     }
 
-    const nextIncome = income.status === 'received' && income.recurring
-      ? createNextIncome(income)
-      : null
-
     if (income.status === 'received') {
       recordIncomeTransaction(income)
     }
 
-    setIncomesState((cur) => ({
-      incomes: nextIncome
-        ? [nextIncome, income, ...cur.incomes]
-        : [income, ...cur.incomes],
-    }))
+    setIncomesState((cur) => ({ incomes: [income, ...cur.incomes] }))
     setStatusMessage('Receita cadastrada.')
     addToast({ title: 'Receita cadastrada', description: 'Salva com sucesso.', tone: 'success' })
+    setFormData({ ...initialFormData, date: TODAY })
+  }
+
+  function handleSubmitRecurringGroup() {
+    const amount = parseBrazilianAmount(formData.amount)
+    if (amount <= 0 || !formData.description.trim() || !formData.source.trim() || !formData.date) {
+      setStatusMessage('Preencha valor, descrição, origem e data.')
+      return
+    }
+
+    const groupId = `rgrp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const startDate = formData.date
+    const endDate = addMonths(startDate, 12)
+    const records = []
+    let currentDate = startDate
+
+    while (currentDate <= endDate) {
+      records.push({
+        id: createIncomeId(),
+        type: formData.type === 'cash' ? 'cash' : 'receivable',
+        description: formData.description.trim(),
+        source: formData.source.trim(),
+        amount,
+        date: currentDate,
+        status: 'pending',
+        recurring: true,
+        frequency: formData.frequency,
+        note: formData.note.trim(),
+        receivedAt: '',
+        installmentGroupId: '',
+        installmentsTotal: 1,
+        installmentNumber: 1,
+        recurringGroupId: groupId,
+      })
+      currentDate = addFrequency(currentDate, formData.frequency)
+    }
+
+    setIncomesState((cur) => ({ incomes: [...records, ...cur.incomes] }))
+    setStatusMessage(`${records.length} lançamentos recorrentes criados.`)
+    addToast({
+      title: 'Recorrência criada',
+      description: `${records.length} lançamentos de ${formatCurrency(amount)}`,
+      tone: 'success',
+    })
     setFormData({ ...initialFormData, date: TODAY })
   }
 
@@ -268,10 +309,13 @@ export function IncomeScreen() {
   }
 
   function handleDelete(income) {
-    const groupSize = income.installmentGroupId
+    const installGroupSize = income.installmentGroupId
       ? incomes.filter((i) => i.installmentGroupId === income.installmentGroupId).length
       : 0
-    setDeleteConfirm({ income, groupSize })
+    const recurGroupSize = income.recurringGroupId
+      ? incomes.filter((i) => i.recurringGroupId === income.recurringGroupId).length
+      : 0
+    setDeleteConfirm({ income, groupSize: installGroupSize || recurGroupSize })
   }
 
   function handleConfirmDelete(mode) {
@@ -284,6 +328,12 @@ export function IncomeScreen() {
         incomes: cur.incomes.filter((i) => i.installmentGroupId !== groupId),
       }))
       addToast({ title: 'Parcelas excluídas', description: 'Todo o grupo foi removido.', tone: 'success' })
+    } else if (mode === 'group' && income.recurringGroupId) {
+      const groupId = income.recurringGroupId
+      setIncomesState((cur) => ({
+        incomes: cur.incomes.filter((i) => i.recurringGroupId !== groupId),
+      }))
+      addToast({ title: 'Recorrência excluída', description: 'Todos os lançamentos foram removidos.', tone: 'success' })
     } else {
       setIncomesState((cur) => ({
         incomes: cur.incomes.filter((i) => i.id !== income.id),

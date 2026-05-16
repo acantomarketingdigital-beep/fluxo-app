@@ -101,6 +101,7 @@ function normalizeExpense(expense) {
     cardId: expense.cardId ?? '',
     cardName: expense.cardName ?? '',
     installmentGroupId: expense.installmentGroupId ?? '',
+    recurringGroupId: expense.recurringGroupId ?? '',
   }
 }
 
