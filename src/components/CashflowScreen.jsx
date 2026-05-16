@@ -3,7 +3,7 @@ import { Topbar } from './Topbar'
 import { loadExpensesState } from '../storage/expensesStorage'
 import { loadIncomesState } from '../storage/incomesStorage'
 
-const PERIOD_OPTIONS = [3, 6, 12]
+const PERIOD_OPTIONS = [6, 12, 18, 24]
 
 export function CashflowScreen() {
   const [period, setPeriod] = useState(6)
@@ -52,12 +52,12 @@ export function CashflowScreen() {
           <div className="cashflow-avg-tile">
             <span>Receita média/mês</span>
             <strong>{formatCurrency(averages.income)}</strong>
-            <small>Nos últimos {period} meses</small>
+            <small>Nos próximos {period} meses</small>
           </div>
           <div className="cashflow-avg-tile">
             <span>Despesa média/mês</span>
             <strong>{formatCurrency(averages.expense)}</strong>
-            <small>Nos últimos {period} meses</small>
+            <small>Nos próximos {period} meses</small>
           </div>
           <div className="cashflow-avg-tile">
             <span>Saldo médio/mês</span>
@@ -84,7 +84,7 @@ export function CashflowScreen() {
         {months.length === 0 ? (
           <div className="cashflow-table-wrap">
             <div className="cashflow-empty">
-              Nenhum lançamento encontrado nos últimos {period} meses.
+              Nenhum lançamento encontrado nos próximos {period} meses.
               <br />
               Cadastre receitas e despesas para ver o fluxo aqui.
             </div>
@@ -132,20 +132,20 @@ export function CashflowScreen() {
           <div style={{ padding: '16px', border: '1px solid var(--line)', borderRadius: '8px', background: 'var(--surface)', fontSize: '0.9rem', color: 'var(--muted)', lineHeight: 1.6 }}>
             {averages.balance >= 0 ? (
               <>
-                Nos últimos {period} meses você recebeu em média{' '}
+                Nos próximos {period} meses está projetado em média{' '}
                 <strong style={{ color: 'var(--text-strong)' }}>{formatCurrency(averages.income)}/mês</strong>{' '}
-                e gastou em média{' '}
+                com gastos de{' '}
                 <strong style={{ color: 'var(--text-strong)' }}>{formatCurrency(averages.expense)}/mês</strong>.{' '}
-                Sobrou em média{' '}
+                Saldo projetado de{' '}
                 <strong style={{ color: 'var(--emerald)' }}>{formatCurrency(averages.balance)}/mês</strong>.
               </>
             ) : (
               <>
-                Nos últimos {period} meses você recebeu em média{' '}
+                Nos próximos {period} meses está projetado em média{' '}
                 <strong style={{ color: 'var(--text-strong)' }}>{formatCurrency(averages.income)}/mês</strong>{' '}
-                e gastou em média{' '}
+                com gastos de{' '}
                 <strong style={{ color: 'var(--text-strong)' }}>{formatCurrency(averages.expense)}/mês</strong>.{' '}
-                Você está fechando em média{' '}
+                O saldo projetado é de{' '}
                 <strong style={{ color: '#fca5a5' }}>{formatCurrency(Math.abs(averages.balance))}</strong> no negativo por mês.
               </>
             )}
@@ -164,7 +164,7 @@ function loadRawData() {
 }
 
 function buildCashflow({ incomes, expenses }, period) {
-  const monthKeys = getPastMonthKeys(period)
+  const monthKeys = getFutureMonthKeys(period)
 
   let accumulated = 0
 
@@ -213,14 +213,14 @@ function buildCashflow({ incomes, expenses }, period) {
   }
 }
 
-function getPastMonthKeys(count) {
+function getFutureMonthKeys(count) {
   const keys = []
   const now = new Date()
 
-  for (let i = count - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
     const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const m = String(d.getMonth() + 1).padStart(2, '00').slice(-2)
     keys.push(`${y}-${m}`)
   }
 
