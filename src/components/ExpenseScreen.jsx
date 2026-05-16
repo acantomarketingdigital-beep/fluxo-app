@@ -509,10 +509,19 @@ export function ExpenseScreen() {
                 </label>
 
                 <div className="modal-actions">
-                  <button className="ghost-action" onClick={() => { setEditingExpense(null); setEditFormData(null) }} type="button">
-                    Cancelar
+                  <button
+                    className="confirm-action-danger"
+                    onClick={() => { setEditingExpense(null); setEditFormData(null); handleDelete(editingExpense) }}
+                    type="button"
+                  >
+                    Excluir
                   </button>
-                  <button className="primary-action" type="submit">Salvar alterações</button>
+                  <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+                    <button className="ghost-action" onClick={() => { setEditingExpense(null); setEditFormData(null) }} type="button">
+                      Cancelar
+                    </button>
+                    <button className="primary-action" type="submit">Salvar alterações</button>
+                  </div>
                 </div>
               </form>
             </div>

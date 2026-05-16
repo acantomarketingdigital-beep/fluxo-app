@@ -498,12 +498,23 @@ export function CardsScreen({ onNavigate, productAccess }) {
                 </label>
 
                 <div className="modal-actions">
-                  <button className="ghost-action" onClick={() => { setShowCardForm(false); setEditingCard(null) }} type="button">
-                    Cancelar
-                  </button>
-                  <button className="primary-action" type="submit">
-                    {editingCard ? 'Salvar alterações' : 'Criar cartão'}
-                  </button>
+                  {editingCard ? (
+                    <button
+                      className="confirm-action-danger"
+                      onClick={() => { setShowCardForm(false); setEditingCard(null); handleDeleteCard(editingCard) }}
+                      type="button"
+                    >
+                      Excluir
+                    </button>
+                  ) : null}
+                  <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+                    <button className="ghost-action" onClick={() => { setShowCardForm(false); setEditingCard(null) }} type="button">
+                      Cancelar
+                    </button>
+                    <button className="primary-action" type="submit">
+                      {editingCard ? 'Salvar alterações' : 'Criar cartão'}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>

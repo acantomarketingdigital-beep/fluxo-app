@@ -400,8 +400,17 @@ export function IncomeScreen() {
                 </label>
 
                 <div className="modal-actions">
-                  <button className="ghost-action" onClick={() => { setEditingIncome(null); setEditFormData(null) }} type="button">Cancelar</button>
-                  <button className="primary-action" type="submit">Salvar alterações</button>
+                  <button
+                    className="confirm-action-danger"
+                    onClick={() => { setEditingIncome(null); setEditFormData(null); handleDelete(editingIncome) }}
+                    type="button"
+                  >
+                    Excluir
+                  </button>
+                  <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+                    <button className="ghost-action" onClick={() => { setEditingIncome(null); setEditFormData(null) }} type="button">Cancelar</button>
+                    <button className="primary-action" type="submit">Salvar alterações</button>
+                  </div>
                 </div>
               </form>
             </div>
